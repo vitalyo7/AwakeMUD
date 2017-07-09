@@ -1,7 +1,7 @@
-/******************************************************
-* Code for the handling of player groups. Written for *
-* AwakeMUD Community Edition by Lucien Sadi. 06/03/17 *
-******************************************************/
+/*******************************************************
+ * Code for the handling of player groups. Written for *
+ * AwakeMUD Community Edition by Lucien Sadi. 06/03/17 *
+ *******************************************************/
 
 #ifndef _playergroup_class_h
 #define _playergroup_class_h
