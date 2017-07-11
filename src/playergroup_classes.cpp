@@ -357,9 +357,12 @@ void Playergroup::invite(struct char_data *ch, char *argument) {
     send_to_char("They can't hear you.\r\n", ch);
   } else if (GET_TKE(target) < 100) {
     send_to_char("That person isn't experienced enough to be a valuable addition to your team.\r\n", ch);
-  } else if (GET_PGROUP_DATA(target) && GET_PGROUP(target) && GET_PGROUP(target) == GET_PGROUP(ch)) {
-    send_to_char("They're already part of your group!\r\n", ch);
-    // TODO: If the group is secret, this is info disclosure.
+  } else if (GET_PGROUP_DATA(target) && GET_PGROUP(target) && !GET_PGROUP(target)->is_secret()) {
+    if (GET_PGROUP(target) == this) {
+      send_to_char("They're already part of your group!\r\n", ch);
+    } else {
+      send_to_char("They're already part of another group.\r\n", ch);
+    }
   } else if (FALSE) {
     // TODO: The ability to auto-decline invitations / block people / not be harassed by invitation spam.
   } else {

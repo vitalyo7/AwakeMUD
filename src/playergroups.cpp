@@ -73,6 +73,10 @@ ACMD(do_accept) {
     return;
   }
   
+  if (GET_PGROUP_DATA(ch)) {
+    send_to_char("You'll have to leave your current group first.\r\n", ch);
+  }
+  
   if (ch->pgroup_invitations == NULL) {
     send_to_char("You have no playergroup invitations at this time.\r\n", ch);
     return;
