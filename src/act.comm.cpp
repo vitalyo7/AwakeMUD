@@ -48,7 +48,7 @@ ACMD(do_say)
   skip_spaces(&argument);
   if (!*argument)
     send_to_char(ch, "Yes, but WHAT do you want to say?\r\n");
-  else if (subcmd != SCMD_OSAY && !PLR_FLAGGED(ch, PLR_MATRIX) && (affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0]))
+  else if (subcmd != SCMD_OSAY && !PLR_FLAGGED(ch, PLR_MATRIX) && (!CAN_MAKE_NOISE(ch)))
     send_to_char("You can't seem to make any noise.\r\n", ch);
   else {
     if (AFF_FLAGGED(ch, AFF_RIG)) {
@@ -171,7 +171,7 @@ ACMD(do_exclaim)
 
   if (!*argument)
     send_to_char(ch, "Yes, but WHAT do you like to exclaim?\r\n");
-  else if (affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0])
+  else if (!CAN_MAKE_NOISE(ch))
     send_to_char("You can't seem to make any noise.\r\n", ch);
   else {
     sprintf(buf, "$z ^nexclaims, \"%s!^n\"", argument);
@@ -271,7 +271,7 @@ ACMD(do_ask)
 
   if (!*argument)
     send_to_char(ch, "Yes, but WHAT do you like to ask?\r\n");
-  else if (affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0])
+  else if (!CAN_MAKE_NOISE(ch))
     send_to_char("You can't seem to make any noise.\r\n", ch);
   else {
     sprintf(buf, "$z asks, \"%s?^n\"", argument);
@@ -303,7 +303,7 @@ ACMD(do_spec_comm)
   half_chop(argument, buf, buf2);
   success = success_test(GET_SKILL(ch, GET_LANGUAGE(ch)), 4);
 
-  if (affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0]) {
+  if (!CAN_MAKE_NOISE(ch)) {
     send_to_char("You can't seem to make any noise.\r\n", ch);
     return;
   }
@@ -580,7 +580,7 @@ ACMD(do_broadcast)
     return;
   }
 
-  if ((affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0]) && !cyberware) {
+  if (!CAN_MAKE_NOISE(ch) && !cyberware) {
     send_to_char("You can't seem to make any noise.\r\n", ch);
     return;
   }
@@ -800,7 +800,7 @@ ACMD(do_gen_comm)
     return;
   }
 
-  if (subcmd == SCMD_SHOUT && (affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0])) {
+  if (subcmd == SCMD_SHOUT && !CAN_MAKE_NOISE(ch)) {
     send_to_char("You can't seem to make any noise.\r\n", ch);
     return;
   }
@@ -1196,7 +1196,7 @@ ACMD(do_phone)
       send_to_char(ch, "No one has answered it yet.\r\n");
       return;
     }
-    if (affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0]) {
+    if (!CAN_MAKE_NOISE(ch)) {
       send_to_char("You can't seem to make any noise.\r\n", ch);
       return;
     }

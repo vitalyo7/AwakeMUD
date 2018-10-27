@@ -1510,3 +1510,29 @@ void remove_workshop_from_room(struct obj_data *obj) {
     }
   }
 }
+
+rnum_t get_current_world_index(struct char_data *ch, struct veh_data *veh) {
+  sprintf(buf, "Processing g_c_w_r(%s, %s).", ch ? GET_CHAR_NAME(ch) : "nobody", veh ? GET_VEH_NAME(veh) : "nothing");
+  log(buf);
+  if (ch) {
+    if (ch->in_room != NOWHERE)
+      return ch->in_room;
+    else
+      return get_current_world_index(NULL, ch->in_veh);
+  }
+  
+  if (veh) {
+    if (veh->in_room != NOWHERE)
+      return veh->in_room;
+    else
+      return get_current_world_index(NULL, veh->in_veh);
+  }
+  
+  sprintf(buf, "SYSERR: get_current_world_index() was given neither a valid char nor veh. Returning 0, this will cause problems.");
+  mudlog(buf, NULL, LOG_SYSLOG, TRUE);
+  return 0;
+}
+
+
+
+

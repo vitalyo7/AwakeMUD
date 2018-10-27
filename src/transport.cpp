@@ -493,7 +493,7 @@ SPECIAL(taxi)
 
   if (CMD_IS("say") || CMD_IS("'")) {
     // Failure condition: If you can't speak, the cabbie can't hear you. TODO: Test this.
-    if (affected_by_spell(ch, SPELL_STEALTH) || world[ch->in_veh ? ch->in_veh->in_room : ch->in_room].silence[0])
+    if (!CAN_MAKE_NOISE(ch))
       return FALSE;
     
     bool found = FALSE;

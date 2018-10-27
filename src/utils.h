@@ -68,6 +68,7 @@ bool    has_kit(struct char_data *ch, int type);
 struct obj_data *find_workshop(struct char_data *ch, int type);
 void    add_workshop_to_room(struct obj_data *obj);
 void    remove_workshop_from_room(struct obj_data *obj);
+rnum_t  get_current_world_index(struct char_data *ch, struct veh_data *veh);
 
 /* undefine MAX and MIN so that our functions are used instead */
 #ifdef MAX
@@ -596,6 +597,9 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define CAN_GET_OBJ(ch, obj)   \
    (CAN_WEAR((obj), ITEM_WEAR_TAKE) && CAN_CARRY_OBJ((ch),(obj)) && \
     CAN_SEE_OBJ((ch),(obj)))
+
+#define CAN_MAKE_NOISE(ch) \
+  !(affected_by_spell((ch), SPELL_STEALTH) || world[get_current_world_index((ch), NULL)].silence[0])
 
 #define PERS(ch, vict)   (CAN_SEE(vict, ch)? GET_NAME(ch) : "someone")
 #define WPERS(ch, vict)  (CAN_SEE(vict, ch)? GET_CHAR_NAME(ch) : "someone")
