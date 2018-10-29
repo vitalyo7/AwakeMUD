@@ -1511,7 +1511,7 @@ void remove_workshop_from_room(struct obj_data *obj) {
   }
 }
 
-rnum_t get_current_world_index(struct char_data *ch, struct veh_data *veh) {
+rnum_t get_current_world_index(struct char_data *ch, struct veh_data *veh = NULL) {
   sprintf(buf, "Processing g_c_w_r(%s, %s).", ch ? GET_CHAR_NAME(ch) : "nobody", veh ? GET_VEH_NAME(veh) : "nothing");
   log(buf);
   if (ch) {

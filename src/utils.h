@@ -68,7 +68,7 @@ bool    has_kit(struct char_data *ch, int type);
 struct obj_data *find_workshop(struct char_data *ch, int type);
 void    add_workshop_to_room(struct obj_data *obj);
 void    remove_workshop_from_room(struct obj_data *obj);
-rnum_t  get_current_world_index(struct char_data *ch, struct veh_data *veh);
+rnum_t  get_current_world_index(struct char_data *ch, struct veh_data *veh = NULL);
 
 /* undefine MAX and MIN so that our functions are used instead */
 #ifdef MAX

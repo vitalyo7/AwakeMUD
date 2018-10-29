@@ -60,10 +60,16 @@ ACMD(do_say)
         send_to_host(ch->persona->in_host, buf, ch->persona, TRUE);
         send_to_icon(ch->persona, "You say, \"%s^n\"\r\n", argument);
       } else {
-        for (struct char_data *targ = world[ch->in_room].people; targ; targ = targ->next_in_room)
-          if (targ != ch && PLR_FLAGGED(targ, PLR_MATRIX))
-            send_to_char(targ, "Your hitcher says, \"%s^n\"\r\n", argument);
-        send_to_char(ch, "You send, down the line, \"%s^n\"\r\n", argument);
+        if (ch->in_room) {
+          for (struct char_data *targ = world[ch->in_room].people; targ; targ = targ->next_in_room)
+            if (targ != ch && PLR_FLAGGED(targ, PLR_MATRIX))
+              send_to_char(targ, "Your hitcher says, \"%s^n\"\r\n", argument);
+          send_to_char(ch, "You send, down the line, \"%s^n\"\r\n", argument);
+        }
+        else if (ch->in_veh) {
+          // TODO: If characters decking from vehicles is ever implemented, this clause will prevent crashes when their hitchers speak.
+          // Since it's not currently implemented, I'm not writing the logic for it.
+        }
       }
       return;
     }
