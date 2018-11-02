@@ -712,6 +712,15 @@ bool load_char(const char *name, char_data *ch, bool logon)
             }
         inside = atoi(row[17]);
         GET_OBJ_TIMER(obj) = atoi(row[19]);
+        
+        // row 20: extra flags. We want to retain the proto's flags but also persist anti-cheat flags.
+        Bitfield temp_extra_flags;
+        temp_extra_flags.FromString(row[20]);
+        if (temp_extra_flags.IsSet(ITEM_WIZLOAD))
+          GET_OBJ_EXTRA(obj).SetBit(ITEM_WIZLOAD);
+        if (temp_extra_flags.IsSet(ITEM_IMMLOAD))
+          GET_OBJ_EXTRA(obj).SetBit(ITEM_IMMLOAD);
+        
         GET_OBJ_ATTEMPT(obj) = atoi(row[21]);
         GET_OBJ_CONDITION(obj) = atoi(row[22]);
         if (inside > 0) {
@@ -774,6 +783,15 @@ bool load_char(const char *name, char_data *ch, bool logon)
             }
         inside = atoi(row[17]);
         GET_OBJ_TIMER(obj) = atoi(row[18]);
+        
+        // row 19: extra flags. We want to retain the proto's flags but also persist anti-cheat flags.
+        Bitfield temp_extra_flags;
+        temp_extra_flags.FromString(row[19]);
+        if (temp_extra_flags.IsSet(ITEM_WIZLOAD))
+          GET_OBJ_EXTRA(obj).SetBit(ITEM_WIZLOAD);
+        if (temp_extra_flags.IsSet(ITEM_IMMLOAD))
+          GET_OBJ_EXTRA(obj).SetBit(ITEM_IMMLOAD);
+        
         GET_OBJ_ATTEMPT(obj) = atoi(row[20]);
         GET_OBJ_CONDITION(obj) = atoi(row[21]);
         if (inside > 0) {
@@ -1856,3 +1874,15 @@ void idle_delete()
 }
 
 
+void verify_db_password_column_size() {
+  // show columns in pfiles like 'password';
+  mysql_wrapper(mysql, "SHOW COLUMNS IN `pfiles` LIKE 'password';");
+  MYSQL_RES *res = mysql_use_result(mysql);
+  MYSQL_ROW row = mysql_fetch_row(res);
+  if (strncmp(row[1], "varchar(200)", sizeof("varchar(200)")) != 0) {
+    log("FATAL ERROR: Your pfiles table's password column needs to be reconfigured.");
+    log("Execute this command on your database:  ALTER TABLE `pfiles` MODIFY `Password` VARCHAR(200);");
+    exit(1);
+  }
+  mysql_free_result(res);
+}

@@ -2626,9 +2626,9 @@ int check_recoil(struct char_data *ch, struct obj_data *gun)
         comp++;
       else if (AFF_FLAGGED(ch, AFF_PRONE)) {
         if (GET_OBJ_VAL(obj, 1) == ACCESS_BIPOD)
-          comp += 2;
+          comp += RECOIL_COMP_VALUE_BIPOD;
         else if (GET_OBJ_VAL(obj, 1) == ACCESS_TRIPOD)
-          comp += 6;
+          comp += RECOIL_COMP_VALUE_TRIPOD;
         
       }
     }
@@ -3191,9 +3191,6 @@ int calculate_vision_penalty(struct char_data *ch, struct char_data *victim) {
   return modifier;
 }
 
-// TODO: Macro this for compiler speed.
-#define IS_DAMTYPE_PHYSICAL(type) !((type) == TYPE_HIT || (type) == TYPE_BLUDGEON || (type) == TYPE_PUNCH || (type) == TYPE_TASER || (type) == TYPE_CRUSH || (type) == TYPE_POUND)
-
 //todo: single shot weaps can only be fired once per combat phase-- what does this mean for us?
 
 struct combat_data *populate_cyberware(struct char_data *ch, struct combat_data *cd) {
@@ -3557,7 +3554,7 @@ void hit(struct char_data *ch, struct char_data *victim, struct obj_data *weap, 
     
     // Setup: If you have a gyro mount, it negates recoil and movement penalties up to its rating.
     if (att->gyro && !(AFF_FLAGGED(ch, AFF_MANNING) || AFF_FLAGGED(ch, AFF_RIG) || AFF_FLAGGED(ch, AFF_PILOT)))
-      att->modifiers[COMBAT_MOD_GYRO] -= MIN(att->modifiers[COMBAT_MOD_MOVEMENT] + att->modifiers[COMBAT_MOD_RECOIL], GET_OBJ_VAL(att->gyro, 1));
+      att->modifiers[COMBAT_MOD_GYRO] -= MIN(att->modifiers[COMBAT_MOD_MOVEMENT] + att->modifiers[COMBAT_MOD_RECOIL], GET_OBJ_VAL(att->gyro, 0));
     
     // Calculate and display pre-success-test information.
     sprintf( rbuf, "%s", GET_CHAR_NAME( ch ) );
