@@ -93,7 +93,7 @@ bool File::GetLine(char *buf, size_t buf_size, bool blank)
     fgets(buf, buf_size, fl);
     line_num++;
 
-    if (*buf && *buf != '*' && (blank ? TRUE : *buf != '\n')) {
+    if (*buf && *buf != '*' && (blank ? TRUE : (*buf != '\n' && *buf != '\r'))) {
       char *ptr = strchr(buf, '\n');
 
       if (ptr && ptr < (buf + buf_size))

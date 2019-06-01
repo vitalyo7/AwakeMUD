@@ -15,6 +15,7 @@
 #include "awake.h"
 #include "constants.h"
 #include "config.h"
+#include "chargen.h"
 
 #define CH d->character
 
@@ -24,6 +25,32 @@ extern char *prepare_quotes(char *dest, const char *str);
 extern void display_help(char *help, const char *arg);
 
 int get_minimum_attribute_points_for_race(int race);
+void _imp_create_parse(struct descriptor_data *d, const char *arg);
+
+Chargen::Chargen()
+{
+	// Init variables here
+	log_vfprintf("Chargen : Initialize character generation handler.");
+}
+
+
+Chargen::~Chargen()
+{
+	// Clean variables here
+}
+
+void Chargen::create_parse(struct descriptor_data *d, const char *arg)
+{
+	// Do nothing atm
+	log_vfprintf("*beep");
+	_imp_create_parse(d, arg);
+}
+
+// Initialize singleton
+Chargen chargenHandler;
+
+
+
 
 const char *pc_race_types[] =
   {
@@ -601,7 +628,7 @@ int get_maximum_attribute_points_for_race(int race) {
   return amount;
 }
 
-void create_parse(struct descriptor_data *d, const char *arg)
+void _imp_create_parse(struct descriptor_data *d, const char *arg)
 {
   int i = MIN(120, atoi(arg)), ok;
   int minimum_attribute_points, maximum_attribute_points, available_attribute_points;

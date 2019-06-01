@@ -34,6 +34,7 @@
 #include "config.h"
 #include "newmatrix.h"
 #include "security.h"
+#include "chargen.h"
 
 #if defined(__CYGWIN__)
 #include <crypt.h>
@@ -51,6 +52,9 @@ extern int restrict;
 extern MYSQL *mysql;
 extern int mysql_wrapper(MYSQL *mysql, const char *query);
 
+/* External handle modules */
+extern Chargen chargenHandler;
+
 /* external functions */
 void echo_on(struct descriptor_data * d);
 void echo_off(struct descriptor_data * d);
@@ -60,7 +64,9 @@ int isbanned(char *hostname);
 void init_create_vars(struct descriptor_data *d);
 // for olc
 void vedit_parse(struct descriptor_data * d, const char *arg);
-void create_parse(struct descriptor_data *d, const char *arg);
+
+// void create_parse(struct descriptor_data *d, const char *arg); // This is now done via chargen module
+
 void iedit_parse(struct descriptor_data *d, const char *arg);
 void redit_parse(struct descriptor_data *d, const char *arg);
 void medit_parse(struct descriptor_data *d, const char *arg);
@@ -2128,7 +2134,7 @@ void nanny(struct descriptor_data * d, char *arg)
     init_parse(d, arg);
     break;
   case CON_CCREATE:
-    create_parse(d, arg);
+	chargenHandler.create_parse(d, arg);
     break;
   case CON_PGEDIT:
     pgedit_parse(d, arg);
