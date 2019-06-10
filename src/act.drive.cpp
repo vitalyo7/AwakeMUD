@@ -612,6 +612,7 @@ ACMD(do_upgrade)
     case 1:
       skill = 1;
       // explicit fallthrough-- internal mounts are +1 skill vs external mounts, but otherwise share attributes
+      // fall through
     case 0:
       j++;
       target = 10;
@@ -619,6 +620,7 @@ ACMD(do_upgrade)
     case 3:
       skill = 1;
       // explicit fallthrough-- internal mounts are +1 skill vs external mounts, but otherwise share attributes
+      // fall through
     case 2:
       j += 2;
       target = 10;
@@ -981,7 +983,7 @@ ACMD(do_repair)
   shop = find_workshop(ch, TYPE_VEHICLE);
   if (!shop) {
     if (veh->damage >= 7) {
-      send_to_char("You better get it to a garage before you try and fix this much damage.\r\n", ch);
+      send_to_char("You'd better get it to a garage before you try and fix this much damage.\r\n", ch);
       return;
     }
     target += 2;
