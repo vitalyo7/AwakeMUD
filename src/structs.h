@@ -156,6 +156,7 @@ struct room_data
   char *night_desc;
   struct extra_descr_data *ex_description; /* for examine/look       */
   struct room_direction_data *dir_option[NUM_OF_DIRS]; /* Directions */
+  struct room_direction_data *temporary_stored_exit; // Stores exits that elevators overwrote
   vnum_t matrix;		/* Matrix exit */
   int access;
   int io;
@@ -189,7 +190,7 @@ struct room_data
 
   room_data() :
       name(NULL), description(NULL), night_desc(NULL), ex_description(NULL),
-      matrix(0), access(0), io(0), trace(0),
+      temporary_stored_exit(NULL), matrix(0), access(0), io(0), trace(0),
       bandwidth(0), jacknumber(0), address(NULL), peaceful(0), func(NULL), contents(NULL),
       people(NULL), vehicles(NULL), watching(NULL)
   {
@@ -793,7 +794,7 @@ struct descriptor_data
       large_outbuf(NULL), character(NULL), original(NULL), snooping(NULL),
       snoop_by(NULL), next(NULL), misc_data(NULL), edit_obj(NULL), edit_room(NULL),
       edit_mob(NULL), edit_quest(NULL), edit_shop(NULL), edit_zon(NULL),
-      edit_cmd(NULL), edit_veh(NULL), edit_host(NULL), edit_icon(NULL)
+      edit_cmd(NULL), edit_veh(NULL), edit_host(NULL), edit_icon(NULL), edit_pgroup(NULL)
   {
     // Zero out the communication history for all channels.
     for (int channel = 0; channel < NUM_COMMUNICATION_CHANNELS; channel++)
