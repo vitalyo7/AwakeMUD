@@ -1817,23 +1817,6 @@ enum {
 #define CON_ASKNAME      45            /* Ask user for name            */
 #define CON_PGEDIT       46
 
-/* chargen connected modes */
-#define CCR_AWAIT_CR    -1
-#define CCR_SEX         0
-#define CCR_RACE        1
-#define CCR_TOTEM       2
-#define CCR_PRIORITY    3
-#define CCR_ASSIGN      4
-#define CCR_TRADITION   5
-#define CCR_ASPECT	6
-#define CCR_TOTEM2	7
-#define CCR_TYPE	8
-#define CCR_POINTS	9
-#define CCR_PO_ATTR	10
-#define CCR_PO_SKILL	11
-#define CCR_PO_RESOURCES	12
-#define CCR_PO_MAGIC	13
-
 #define PO_RACE		0
 #define PO_ATTR		1
 #define PO_SKILL	2

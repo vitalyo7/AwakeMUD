@@ -27,10 +27,40 @@ extern void display_help(char *help, const char *arg);
 int get_minimum_attribute_points_for_race(int race);
 void _imp_create_parse(struct descriptor_data *d, const char *arg);
 
+/* chargen connected modes */
+
+
+enum chargen_states {
+  CCR_AWAIT_CR =   -1,
+  CCR_SEX,
+  CCR_RACE,
+  CCR_TOTEM,
+  CCR_PRIORITY,
+  CCR_ASSIGN,
+  CCR_TRADITION,
+  CCR_ASPECT,
+  CCR_TOTEM2,
+  CCR_TYPE,
+  CCR_POINTS,
+  CCR_PO_ATTR,
+  CCR_PO_SKILL,
+  CCR_PO_RESOURCES,
+  CCR_PO_MAGIC
+};
+
+FSM_STATE(view_sex_selection);
+FSM_STATE(view_race_selection);
+
 Chargen::Chargen()
 {
 	// Init variables here
 	log_vfprintf("Chargen : Initialize character generation handler.");
+
+	Fsm *fsm = &this->chargenFsm;
+
+	// Select gender
+	fsm->createState(CCR_SEX, &view_sex_selection);
+	fsm->createState(CCR_RACE, &view_race_selection);
 }
 
 
@@ -43,13 +73,20 @@ void Chargen::create_parse(struct descriptor_data *d, const char *arg)
 {
 	// Do nothing atm
 	log_vfprintf("*beep");
+	(this->chargenFsm).handleInput(d->ccr.mode, d, arg);
 	_imp_create_parse(d, arg);
 }
 
 // Initialize singleton
 Chargen chargenHandler;
 
+FSM_STATE(view_sex_selection) {
+	SEND_TO_Q("[NEW CHARGEN] : Select Sex\r\n", d);
+}
 
+FSM_STATE(view_race_selection) {
+	SEND_TO_Q("[NEW CHARGEN] : Select Race\r\n", d);
+}
 
 
 const char *pc_race_types[] =
