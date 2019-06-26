@@ -159,6 +159,10 @@ void process_boost(void);
 class memoryClass *Mem = new memoryClass();
 void show_string(struct descriptor_data * d, char *input);
 
+#ifdef USE_DEBUG_CANARIES
+void check_memory_canaries();
+#endif
+
 #if (defined(WIN32) && !defined(__CYGWIN__))
 void gettimeofday(struct timeval *t, struct timezone *dummy)
 {
@@ -324,7 +328,7 @@ void copyover_recover()
         load_room = real_room(GET_LAST_IN(d->character));
       else
         load_room = real_room(GET_LOADROOM(d->character));
-      char_to_room(d->character, load_room);
+      char_to_room(d->character, &world[load_room]);
       //look_at_room(d->character, 0);
     }
   }
@@ -654,11 +658,11 @@ void game_loop(int mother_desc)
           d->character->char_specials.timer = 0;
           if (d->original)
             d->original->char_specials.timer = 0;
-          if (!d->connected && GET_WAS_IN(d->character) != NOWHERE) {
-            if (d->character->in_room != NOWHERE)
+          if (!d->connected && GET_WAS_IN(d->character)) {
+            if (d->character->in_room)
               char_from_room(d->character);
             char_to_room(d->character, GET_WAS_IN(d->character));
-            GET_WAS_IN(d->character) = NOWHERE;
+            GET_WAS_IN(d->character) = NULL;
             act("$n has returned.", TRUE, d->character, 0, 0, TO_ROOM);
           }
         }
@@ -745,6 +749,9 @@ void game_loop(int mother_desc)
       another_minute();
       misc_update();
       matrix_update();
+#ifdef USE_DEBUG_CANARIES
+      check_memory_canaries();
+#endif
     }
     
     // Every 5 MUD minutes
@@ -765,16 +772,16 @@ void game_loop(int mother_desc)
       point_update();
       weather_change();
       if (time_info.hours == 17) {
-        for (i = 0; i < top_of_world; i++) {
-          if (ROOM_FLAGGED(i, ROOM_LIT)) {
-            send_to_room("A streetlight hums faintly, flickers, and turns on.\r\n", i);
+        for (i = 0; i <= top_of_world; i++) {
+          if (ROOM_FLAGGED(&world[i], ROOM_STREETLIGHTS)) {
+            send_to_room("A streetlight hums faintly, flickers, and turns on.\r\n", &world[i]);
           }
         }
       }
       if (time_info.hours == 7) {
-        for (i = 0; i < top_of_world; i++) {
-          if (ROOM_FLAGGED(i, ROOM_LIT)) {
-            send_to_room("A streetlight flickers and goes out.\r\n", i);
+        for (i = 0; i <= top_of_world; i++) {
+          if (ROOM_FLAGGED(&world[i], ROOM_STREETLIGHTS)) {
+            send_to_room("A streetlight flickers and goes out.\r\n", &world[i]);
           }
         }
       }
@@ -951,19 +958,22 @@ void make_prompt(struct descriptor_data * d)
 {
   char *prompt;
   
-  if (D_PRF_FLAGGED(d, PRF_NOPROMPT)) {
-    // Minimal prompt-- just a contextual hint for when they're in a buffer.
-    if (d->showstr_point)
-      write_to_descriptor(d->descriptor, " Press [return] to continue, [q] to quit ");
-    return;
+  if (d->str) {
+    if (D_PRF_FLAGGED(d, PRF_SCREENREADER)) {
+      write_to_descriptor(d->descriptor, "Compose mode, write the at symbol on new line to quit. ");
+    } else {
+      write_to_descriptor(d->descriptor, "Compose mode, write @ on new line to quit]: ");
+    }
   }
-  
-  if (d->str)
-    write_to_descriptor(d->descriptor, "] ");
   else if (d->showstr_point)
     write_to_descriptor(d->descriptor, " Press [return] to continue, [q] to quit ");
+  else if (D_PRF_FLAGGED(d, PRF_NOPROMPT)) {
+    // Anything below this line won't render for noprompters.
+    return;
+  }
   else if (STATE(d) == CON_POCKETSEC)
     write_to_descriptor(d->descriptor, " > ");
+  
   else if (!d->connected)
   {
     struct char_data *ch;
@@ -1181,7 +1191,7 @@ void make_prompt(struct descriptor_data * d)
               break;
             case 'v':
               if (GET_REAL_LEVEL(d->character) >= LVL_BUILDER)
-                sprintf(str, "%ld", world[d->character->in_room].number);
+                sprintf(str, "%ld", d->character->in_room->number);
               else
                 strcpy(str, "@v");
               break;
@@ -1242,8 +1252,10 @@ int get_from_q(struct txt_q * queue, char *dest, int *aliased)
   *aliased = queue->head->aliased;
   queue->head = queue->head->next;
   
-  DELETE_AND_NULL_ARRAY(tmp->text);
-  DELETE_AND_NULL(tmp);
+  if (tmp) {
+    DELETE_AND_NULL_ARRAY(tmp->text);
+    DELETE_AND_NULL(tmp);
+  }
   
   return 1;
 }
@@ -2048,9 +2060,9 @@ char *colorize(struct descriptor_data *d, const char *str, bool skip_check)
     // Declare our own error buf so we don't clobber anyone's strings.
     char colorize_error_buf[200];
     sprintf(colorize_error_buf, "SYSERR: Received empty string to colorize() for descriptor %d (orig %s, char %s).",
-            d->descriptor, d->original ? GET_NAME(d->original) : "(null)", d->character ? GET_NAME(d->character) : "(null)");
+            d->descriptor, d->original ? GET_NAME(d->original) : "(null)", d->character ? GET_CHAR_NAME(d->character) : "(null)");
     mudlog(colorize_error_buf, NULL, LOG_SYSLOG, TRUE);
-    strcpy(buffer, "");
+    strcpy(buffer, "(null)");
     return buffer;
   }
   
@@ -2321,16 +2333,16 @@ void send_to_veh(const char *messg, struct veh_data *veh, struct char_data *ch, 
   }
 }
 
-void send_to_room(const char *messg, int room)
+void send_to_room(const char *messg, struct room_data *room)
 {
   struct char_data *i;
   struct veh_data *v;
-  if (messg && room > 0) {
-    for (i = world[room].people; i; i = i->next_in_room)
+  if (messg && room) {
+    for (i = room->people; i; i = i->next_in_room)
       if (i->desc)
         if (!(PLR_FLAGGED(i, PLR_REMOTE) || PLR_FLAGGED(i, PLR_MATRIX)) && AWAKE(i))
           SEND_TO_Q(messg, i->desc);
-    for (v = world[room].vehicles; v; v = v->next_veh)
+    for (v = room->vehicles; v; v = v->next_veh)
       if (v->people)
         send_to_veh(messg, v, NULL, TRUE);
     
@@ -2354,6 +2366,25 @@ char* strip_ending_punctuation_new(const char* orig) {
     *c = '\0';
   
   return stripped;
+}
+
+const char *get_voice_perceived_by(struct char_data *speaker, struct char_data *listener) {
+  static char voice_buf[150];
+  struct remem *mem = NULL;
+  
+  if (IS_NPC(speaker))
+    return GET_NAME(speaker);
+  else {
+    if (IS_SENATOR(listener)) {
+      sprintf(voice_buf, "%s(%s)", speaker->player.physical_text.room_desc, GET_CHAR_NAME(speaker));
+      return voice_buf;
+    } else if ((mem = found_mem(GET_MEMORY(listener), speaker))) {
+      sprintf(voice_buf, "%s(%s)", speaker->player.physical_text.room_desc, CAP(mem->mem));
+      return voice_buf;
+    } else {
+      return speaker->player.physical_text.room_desc;
+    }
+  }
 }
 
 /* higher-level communication: the act() function */
@@ -2382,43 +2413,65 @@ const char *perform_act(const char *orig, struct char_data * ch, struct obj_data
           CHECK_NULL(vict_obj, SANA((struct obj_data *) vict_obj));
           break;
         case 'e':
-          i = HSSH(ch);
+          if (CAN_SEE(to, ch))
+            i = HSSH(ch);
+          else
+            i = "it";
           break;
         case 'E':
-          CHECK_NULL(vict_obj, HSSH(vict));
+          if (vict_obj) {
+            if (CAN_SEE(to, vict))
+              i = HSSH(vict);
+            else
+              i = "it";
+          }
           break;
         case 'F':
           CHECK_NULL(vict_obj, fname((char *) vict_obj));
           break;
         case 'm':
-          i = HMHR(ch);
+          if (CAN_SEE(to, ch))
+            i = HMHR(ch);
+          else
+            i = "them";
           break;
         case 'M':
-          CHECK_NULL(vict_obj, HMHR(vict));
+          if (vict_obj) {
+            if (CAN_SEE(to, vict))
+              i = HMHR(vict);
+            else
+              i = "them";
+          }
           break;
         case 'n':
           if (to == ch)
             i = "you";
-          else if (CAN_SEE(to, ch))
+          else if (CAN_SEE(to, ch)) {
             if (IS_SENATOR(to) && !IS_NPC(ch))
               i = GET_CHAR_NAME(ch);
             else
               i = make_desc(to, ch, buf, TRUE);
+          } else {
+            if (IS_SENATOR(ch))
+              i = "an invisible staff member";
             else
               i = "someone";
+          }
           break;
         case 'N':
           if (to == vict)
             i = "you";
-          else if (CAN_SEE(to, vict))
+          else if (CAN_SEE(to, vict)) {
             if (IS_SENATOR(to) && !IS_NPC(vict))
               i = GET_CHAR_NAME(vict);
-            else if ((mem = found_mem(GET_MEMORY(to), vict)))
-              i = CAP(mem->mem);
             else
-              i = GET_NAME(vict);
+              i = make_desc(to, vict, buf, TRUE);
+          } else {
+            if (IS_SENATOR(vict))
+              i = "an invisible staff member";
             else
               i = "someone";
+          }
           break;
         case 'o':
           CHECK_NULL(obj, OBJN(obj, to));
@@ -2433,26 +2486,24 @@ const char *perform_act(const char *orig, struct char_data * ch, struct obj_data
           CHECK_NULL(vict_obj, OBJS((struct obj_data *) vict_obj, to));
           break;
         case 's':
-          i = HSHR(ch);
+          if (CAN_SEE(to, ch))
+            i = HSHR(ch);
+          else
+            i = "their";
           break;
         case 'S':
-          CHECK_NULL(vict_obj, HSHR(vict));
+          if (vict_obj) {
+            if (CAN_SEE(to, vict))
+              i = HSHR(vict);
+            else
+              i = "their";
+          }
           break;
         case 'T':
           CHECK_NULL(vict_obj, (char *) vict_obj);
           break;
         case 'v':
-          if (IS_NPC(ch))
-            i = GET_NAME(ch);
-          else
-            if (IS_SENATOR(to)) {
-              sprintf(temp, "%s(%s)", ch->player.physical_text.room_desc, GET_CHAR_NAME(ch));
-              i = temp;
-            } else if ((mem = found_mem(GET_MEMORY(to), ch))) {
-              sprintf(temp, "%s(%s)", ch->player.physical_text.room_desc, CAP(mem->mem));
-              i = temp;
-            } else
-              i = ch->player.physical_text.room_desc;
+          i = get_voice_perceived_by(ch, to);
           break;
         case 'z':
           // You always know if it's you.
@@ -2597,11 +2648,11 @@ const char *act(const char *str, int hide_invisible, struct char_data * ch,
    or TO_ROOM or TO_ROLLS */
   
   if (type == TO_VEH_ROOM && ch && ch->in_veh && !ch->in_veh->in_veh)
-    to = world[ch->in_veh->in_room].people;
-  else if (ch && ch->in_room != NOWHERE)
-    to = world[ch->in_room].people;
-  else if (obj && obj->in_room != NOWHERE)
-    to = world[obj->in_room].people;
+    to = ch->in_veh->in_room->people;
+  else if (ch && ch->in_room)
+    to = ch->in_room->people;
+  else if (obj && obj->in_room)
+    to = obj->in_room->people;
   else if (obj && obj->in_veh)
     to = obj->in_veh->people;
   else if (ch && ch->in_veh)
@@ -2643,3 +2694,23 @@ const char *act(const char *str, int hide_invisible, struct char_data * ch,
   return NULL;
 }
 #undef SENDOK
+
+#ifdef USE_DEBUG_CANARIES
+void check_memory_canaries() {
+  // Check every room in the world.
+  for (int world_index = 0; world_index < top_of_world; world_index++) {
+    // Check every direction that exists for this room.
+    for (int direction_index = 0; direction_index <= DOWN; direction_index++) {
+      if (world[world_index].dir_option[direction_index])
+        assert(world[world_index].dir_option[direction_index]->canary == CANARY_VALUE);
+    }
+    // Check the room itself.
+    assert(world[world_index].canary == CANARY_VALUE);
+  }
+  
+  // Check every object in the game.
+  for (int obj_index = 0; obj_index < top_of_objt; obj_index++) {
+    assert(obj_proto[obj_index].canary == CANARY_VALUE);
+  }
+}
+#endif

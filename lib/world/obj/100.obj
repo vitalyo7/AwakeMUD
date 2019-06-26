@@ -55,31 +55,6 @@ Material:	metal
 	Val9:	-1
 	Val10:	30
 BREAK
-#10002
-Keywords:	magazine 1000 peas
-Name:	a magazine of 1000 peas
-RoomDesc:$
-An unfinished object is lying here.~
-LookDesc:$
-It looks pretty much like an unfinished object~
-Type:	Gun Magazine
-WearFlags:	1
-ExtraFlags:	0
-AffFlags:	0
-Material:	metal
-[POINTS]
-	Weight:	0.00
-	Barrier:	32
-	Cost:	0
-	AvailTN:	0
-	AvailDay:	0.00
-	LegalNum:	0
-	LegalCode:	0
-	LegalPermit:	0
-[VALUES]
-	Val0:	1000
-	Val1:	5
-BREAK
 #10003
 Keywords:	ring invisibility test
 Name:	A tester's ring of invisibility
@@ -90,7 +65,7 @@ It looks pretty much like an unfinished object~
 Type:	Worn
 WearFlags:	11
 ExtraFlags:	100000000000
-AffFlags:	10000000000000000000000000000000000000000000
+AffFlags:	1000000000000000000000000000000000000000000
 Material:	paper
 [POINTS]
 	Weight:	0.00
@@ -184,35 +159,6 @@ Material:	metal
 [AFFECT 5]
 	Location:	Target Numbers
 	Modifier:	-50
-BREAK
-#10006
-Keywords:	lsa ammunition cell chunk black alloy strangely port
-Name:	an LSA ammunition cell
-RoomDesc:$
-A chunk of black alloy with a strangely-shaped port has been left here.~
-LookDesc:$
-A simple block of black alloy with an intricate port in the top. Etched along
-the side are the words, "Any sufficiently-advanced technology is
-indistinguishable from magic." 
-~
-Type:	Gun Magazine
-WearFlags:	1
-ExtraFlags:	101000001000
-AffFlags:	0
-Material:	metal
-[POINTS]
-	Weight:	1.00
-	Barrier:	32
-	Cost:	0
-	AvailTN:	0
-	AvailDay:	0.00
-	LegalNum:	0
-	LegalCode:	0
-	LegalPermit:	0
-[VALUES]
-	Val0:	1000000
-	Val1:	12
-	Val2:	1
 BREAK
 #10007
 Keywords:	sleek rifle suppressor
@@ -584,7 +530,7 @@ Material:	metal
 BREAK
 #10021
 Keywords:	vehicle workshop
-Name:	a vehicular workshop
+Name:	a non-saving vehicular workshop
 RoomDesc:$
 An array of tools for the modification and maintenance of vehicles occupies this area.~
 LookDesc:$
@@ -592,7 +538,7 @@ It contains everything you need to upgrade, modify, and repair vehicles.
 ~
 Type:	Workshop
 WearFlags:	1
-ExtraFlags:	0
+ExtraFlags:	100
 AffFlags:	0
 Material:	metal
 [POINTS]
@@ -653,16 +599,16 @@ Material:	metal
 [POINTS]
 	Weight:	0.00
 	Barrier:	32
-	Cost:	0
-	AvailTN:	0
-	AvailDay:	0.00
+	Cost:	1200000
+	AvailTN:	16
+	AvailDay:	30.00
 	LegalNum:	0
 	LegalCode:	0
 	LegalPermit:	0
 [VALUES]
 	Val0:	1
 	Val1:	20
-	Val2:	1
+	Val2:	1200
 BREAK
 #10024
 Keywords:	cheat evas 20
@@ -679,16 +625,16 @@ Material:	metal
 [POINTS]
 	Weight:	0.00
 	Barrier:	32
-	Cost:	0
-	AvailTN:	0
-	AvailDay:	0.00
+	Cost:	1200000
+	AvailTN:	16
+	AvailDay:	30.00
 	LegalNum:	0
 	LegalCode:	0
 	LegalPermit:	0
 [VALUES]
 	Val0:	2
 	Val1:	20
-	Val2:	1
+	Val2:	1200
 BREAK
 #10025
 Keywords:	testing pocket secretary
@@ -727,16 +673,16 @@ Material:	metal
 [POINTS]
 	Weight:	0.00
 	Barrier:	32
-	Cost:	0
-	AvailTN:	0
-	AvailDay:	0.00
+	Cost:	800000
+	AvailTN:	16
+	AvailDay:	30.00
 	LegalNum:	0
 	LegalCode:	0
 	LegalPermit:	0
 [VALUES]
 	Val0:	3
 	Val1:	20
-	Val2:	1
+	Val2:	800
 BREAK
 #10027
 Keywords:	cheat sensor 20
@@ -753,6 +699,32 @@ Material:	paper
 [POINTS]
 	Weight:	0.00
 	Barrier:	1
+	Cost:	800000
+	AvailTN:	16
+	AvailDay:	30.00
+	LegalNum:	0
+	LegalCode:	0
+	LegalPermit:	0
+[VALUES]
+	Val0:	4
+	Val1:	20
+	Val2:	800
+BREAK
+#10028
+Keywords:	BFG-9000 9000 rocket launcher report staff
+Name:	a BFG-9000 rocket launcher
+RoomDesc:$
+^rReport this to the staff!^n~
+LookDesc:$
+It looks pretty much like an unfinished object~
+Type:	Weapon
+WearFlags:	10000000000001
+ExtraFlags:	1100000000100
+AffFlags:	0
+Material:	metal
+[POINTS]
+	Weight:	0.00
+	Barrier:	32
 	Cost:	0
 	AvailTN:	0
 	AvailDay:	0.00
@@ -760,8 +732,14 @@ Material:	paper
 	LegalCode:	0
 	LegalPermit:	0
 [VALUES]
-	Val0:	4
-	Val1:	20
-	Val2:	1
+	Val0:	20
+	Val1:	4
+	Val3:	21
+	Val4:	20
+	Val5:	-1
+	Val7:	-1
+	Val8:	-1
+	Val9:	-1
+	Val10:	2
 BREAK
 END

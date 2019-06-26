@@ -52,6 +52,7 @@
 #include "vtable.h"
 #include "config.h"
 #include "security.h"
+#include "olc.h"
 #include <new>
 
 extern void calc_weight(struct char_data *ch);
@@ -969,6 +970,10 @@ void parse_room(File &fl, long nr)
     }
 
   room_data *room = world+rnum;
+  
+#ifdef USE_DEBUG_CANARIES
+  room->canary = CANARY_VALUE;
+#endif
 
   VTable data;
   data.Parse(&fl);
@@ -1036,8 +1041,8 @@ void parse_room(File &fl, long nr)
       room_direction_data *dir = room->dir_option[i];
       memset(dir, 0, sizeof(room_direction_data));
 
-      dir->to_room = to_vnum;
-      // dir->to_room_vnum will be set in renum_world
+      dir->to_room = &world[0];
+      dir->to_room_vnum = to_vnum;
 
       sprintf(field, "%s/Keywords", sect);
       dir->keyword = str_dup(data.GetString(field, NULL));
@@ -1052,6 +1057,10 @@ void parse_room(File &fl, long nr)
         dir->exit_info = EX_ISDOOR;
       else if (flags == 2)
         dir->exit_info = EX_ISDOOR | EX_PICKPROOF;
+      else if (flags == 3)
+        dir->exit_info = EX_ISDOOR | EX_ASTRALLY_WARDED;
+      else if (flags == 4)
+        dir->exit_info = EX_ISDOOR | EX_PICKPROOF | EX_ASTRALLY_WARDED;
       else
         dir->exit_info = 0;
 
@@ -1070,6 +1079,10 @@ void parse_room(File &fl, long nr)
 
       sprintf(field, "%s/HiddenRating", sect);
       dir->hidden = data.GetInt(field, 0);
+      
+#ifdef USE_DEBUG_CANARIES
+      dir->canary = CANARY_VALUE;
+#endif
     }
   }
 
@@ -1105,6 +1118,10 @@ void parse_room(File &fl, long nr)
   }
 
   top_of_world = rnum++;
+  if (top_of_world >= top_of_world_array) {
+    sprintf(buf, "WARNING: top_of_world >= top_of_world_array at %ld / %d.", top_of_world, top_of_world_array);
+    mudlog(buf, NULL, LOG_SYSLOG, TRUE);
+  }
 }
 
 /* read direction data */
@@ -1138,7 +1155,8 @@ void setup_dir(FILE * fl, int room, int dir)
     world[room].dir_option[dir]->exit_info = 0;
 
   world[room].dir_option[dir]->key = t[1];
-  world[room].dir_option[dir]->to_room = MAX(0, t[2]);
+  world[room].dir_option[dir]->to_room = &world[0]; // Will be set properly during world renumbering.
+  world[room].dir_option[dir]->to_room_vnum = MAX(0, t[2]);
   world[room].dir_option[dir]->key_level = t[3];
 
   world[room].dir_option[dir]->material = (retval > 4) ? t[4] : 5;
@@ -1183,8 +1201,11 @@ void renum_world(void)
     for (door = 0; door < NUM_OF_DIRS; door++)
       if (world[room].dir_option[door]) {
         room_direction_data *dir = world[room].dir_option[door];
-        dir->to_room_vnum = dir->to_room;
-        dir->to_room = real_room(dir->to_room_vnum);
+        vnum_t rnum = real_room(dir->to_room_vnum);
+        if (rnum != NOWHERE)
+          dir->to_room = &world[rnum];
+        else
+          dir->to_room = &world[0];
       }
 }
 
@@ -1391,8 +1412,12 @@ void parse_object(File &fl, long nr)
 
   obj_data *obj = obj_proto+rnum;
 
-  obj->in_room = NOWHERE;
+  obj->in_room = NULL;
   obj->item_number = rnum;
+  
+#ifdef USE_DEBUG_CANARIES
+  obj->canary = CANARY_VALUE;
+#endif
 
   VTable data;
   data.Parse(&fl);
@@ -1690,8 +1715,7 @@ void parse_quest(File &fl, long virtual_nr)
   quest_table[quest_nr].e_string = fl.ReadString();
   quest_table[quest_nr].done = fl.ReadString();
 
-  quest_nr++;
-  top_of_questt = quest_nr;
+  top_of_questt = quest_nr++;
 }
 
 void parse_shop(File &fl, long virtual_nr)
@@ -1807,7 +1831,7 @@ void load_zones(File &fl)
   // This next section reads in the id nums of the players that can edit
   // this zone.
   if (sscanf(buf, "%d %d %d %d %d", &Z.editor_ids[0], &Z.editor_ids[1],
-             &Z.editor_ids[2], &Z.editor_ids[3], &Z.editor_ids[4]) != 5) {
+             &Z.editor_ids[2], &Z.editor_ids[3], &Z.editor_ids[4]) != NUM_ZONE_EDITOR_IDS) {
     fprintf(stderr, "Format error in editor id list of %s", fl.Filename());
     shutdown();
   }
@@ -2180,9 +2204,9 @@ int vnum_object_weapons(char *searchname, struct char_data * ch)
   int power, severity, strength;
   buf[0] = '\0';
 
-  for( severity = 4; severity >= 1; severity -- )
+  for( severity = DEADLY; severity >= LIGHT; severity -- )
     for( power = 21; power >= 0; power-- )
-      for( strength = 5; strength >= 0; strength-- )
+      for( strength = WEAPON_MAXIMUM_STRENGTH_BONUS; strength >= 0; strength-- )
       {
         for (nr = 0; nr <= top_of_objt; nr++) {
           if (GET_OBJ_TYPE(&obj_proto[nr]) != ITEM_WEAPON)
@@ -2197,7 +2221,7 @@ int vnum_object_weapons(char *searchname, struct char_data * ch)
             continue;
           if (GET_OBJ_VAL(&obj_proto[nr],0) > power && power != 21)
             continue;
-          if (GET_OBJ_VAL(&obj_proto[nr],1) > severity && severity != 4)
+          if (GET_OBJ_VAL(&obj_proto[nr],1) > severity && severity != DEADLY)
             continue;
           if (GET_OBJ_VAL(&obj_proto[nr],2) > strength && strength != 5)
             continue;
@@ -2417,6 +2441,13 @@ int vnum_object(char *searchname, struct char_data * ch)
     return vnum_object_affectloc(atoi(arg2),ch);
   if (!strcmp(arg1,"affflag"))
     return vnum_object_affflag(atoi(arg2),ch);
+  
+  // Make it easier for people to find specific types of things.
+  for (int index = ITEM_LIGHT; index < NUM_ITEMS; index++) {
+    if (!str_cmp(searchname, item_types[index]))
+      return vnum_object_type(index, ch);
+  }
+  
   for (nr = 0; nr <= top_of_objt; nr++)
   {
     if (isname(searchname, obj_proto[nr].text.keywords) ||
@@ -2626,7 +2657,7 @@ void spec_update(void)
   int i;
   char empty_argument = '\0';
 
-  for (i = 0; i < top_of_world; i++)
+  for (i = 0; i <= top_of_world; i++)
     if (world[i].func != NULL)
       world[i].func (NULL, world + i, 0, &empty_argument);
 
@@ -2688,6 +2719,11 @@ void reset_zone(int zone, int reboot)
   struct veh_data *veh = NULL;
 
   for (cmd_no = 0; cmd_no < zone_table[zone].num_cmds; cmd_no++) {
+    /*
+     sprintf(buf, "Processing ZCMD %d (zone %d): %c %s %ld %ld %ld",
+            cmd_no, zone_table[zone].number, ZCMD.command, ZCMD.if_flag ? "(if last)" : "(always)", ZCMD.arg1, ZCMD.arg2, ZCMD.arg3);
+    mudlog(buf, NULL, LOG_SYSLOG, TRUE);
+     */
     if (ZCMD.if_flag && !last_cmd)
       continue;
     found = 0;
@@ -2702,7 +2738,7 @@ void reset_zone(int zone, int reboot)
       if ((mob_index[ZCMD.arg1].number < ZCMD.arg2) || (ZCMD.arg2 == -1) ||
           (ZCMD.arg2 == 0 && reboot)) {
         mob = read_mobile(ZCMD.arg1, REAL);
-        char_to_room(mob, ZCMD.arg3);
+        char_to_room(mob, &world[ZCMD.arg3]);
         last_cmd = 1;
       } else {
         if (ZCMD.arg2 == 0 && !reboot)
@@ -2848,7 +2884,7 @@ void reset_zone(int zone, int reboot)
     case 'V':                 /* loads a vehicle */
       if ((veh_index[ZCMD.arg1].number < ZCMD.arg2) || (ZCMD.arg2 == -1) || (ZCMD.arg2 == 0 && reboot)) {        
         veh = read_vehicle(ZCMD.arg1, REAL);
-        veh_to_room(veh, ZCMD.arg3);
+        veh_to_room(veh, &world[ZCMD.arg3]);
         last_cmd = 1;
       } else
         last_cmd = 0;
@@ -2866,7 +2902,7 @@ void reset_zone(int zone, int reboot)
     case 'O':                 /* read an object */
       if ((obj_index[ZCMD.arg1].number < ZCMD.arg2) || (ZCMD.arg2 == -1) || (ZCMD.arg2 == 0 && reboot)) {
         obj = read_object(ZCMD.arg1, REAL);
-        obj_to_room(obj, ZCMD.arg3);
+        obj_to_room(obj, &world[ZCMD.arg3]);
         
         if (GET_OBJ_TYPE(obj) == ITEM_WORKSHOP && GET_WORKSHOP_GRADE(obj) == TYPE_SHOP) {
           if (GET_WORKSHOP_TYPE(obj) == TYPE_VEHICLE && !ROOM_FLAGGED(obj->in_room, ROOM_GARAGE)) {
@@ -2878,7 +2914,7 @@ void reset_zone(int zone, int reboot)
           GET_WORKSHOP_IS_SETUP(obj) = 1;
           
           // Handle the room's workshop[] array.
-          if (obj->in_room != NOWHERE)
+          if (obj->in_room)
             add_workshop_to_room(obj);
         }
         last_cmd = 1;
@@ -3025,11 +3061,11 @@ void reset_zone(int zone, int reboot)
         ZONE_ERROR("door does not exist");
       } else {
         bool ok = FALSE;
-        int opposite = MAX(0, world[ZCMD.arg1].dir_option[ZCMD.arg2]->to_room);
-        if (!world[opposite].dir_option[rev_dir[ZCMD.arg2]] || (ZCMD.arg1 !=
-            world[opposite].dir_option[rev_dir[ZCMD.arg2]]->to_room)) {
+        struct room_data *opposite_room = world[ZCMD.arg1].dir_option[ZCMD.arg2]->to_room;
+        if (!opposite_room->dir_option[rev_dir[ZCMD.arg2]]
+            || (&world[ZCMD.arg1] != opposite_room->dir_option[rev_dir[ZCMD.arg2]]->to_room)) {
           sprintf(buf, "Note: Exits from %ld to %ld do not coincide (zone %d, line %d, cmd %d)",
-                  world[opposite].number, world[ZCMD.arg1].number, zone_table[zone].number,
+                  opposite_room->number, world[ZCMD.arg1].number, zone_table[zone].number,
                   ZCMD.line, cmd_no);
           ZCMD.command = '*';
           mudlog(buf, NULL, LOG_ZONELOG, FALSE);
@@ -3038,20 +3074,17 @@ void reset_zone(int zone, int reboot)
         // here I set the hidden flag for the door if hidden > 0
         if (world[ZCMD.arg1].dir_option[ZCMD.arg2]->hidden)
           SET_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_HIDDEN);
-        if (ok && world[opposite].dir_option[rev_dir[ZCMD.arg2]]->hidden)
-          SET_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_HIDDEN);
+        if (ok && opposite_room->dir_option[rev_dir[ZCMD.arg2]]->hidden)
+          SET_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_HIDDEN);
         // repair all damage
         REMOVE_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_DESTROYED);
         world[ZCMD.arg1].dir_option[ZCMD.arg2]->condition =
           world[ZCMD.arg1].dir_option[ZCMD.arg2]->barrier;
         if (ok) {
-          world[opposite].dir_option[rev_dir[ZCMD.arg2]]->material =
-            world[ZCMD.arg1].dir_option[ZCMD.arg2]->material;
-          world[opposite].dir_option[rev_dir[ZCMD.arg2]]->barrier =
-            world[ZCMD.arg1].dir_option[ZCMD.arg2]->barrier;
-          world[opposite].dir_option[rev_dir[ZCMD.arg2]]->condition =
-            world[ZCMD.arg1].dir_option[ZCMD.arg2]->condition;
-          REMOVE_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_DESTROYED);
+          opposite_room->dir_option[rev_dir[ZCMD.arg2]]->material = world[ZCMD.arg1].dir_option[ZCMD.arg2]->material;
+          opposite_room->dir_option[rev_dir[ZCMD.arg2]]->barrier = world[ZCMD.arg1].dir_option[ZCMD.arg2]->barrier;
+          opposite_room->dir_option[rev_dir[ZCMD.arg2]]->condition = world[ZCMD.arg1].dir_option[ZCMD.arg2]->condition;
+          REMOVE_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_DESTROYED);
         }
         switch (ZCMD.arg3) {
           // you now only have to set one side of a door
@@ -3059,24 +3092,24 @@ void reset_zone(int zone, int reboot)
           REMOVE_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_LOCKED);
           REMOVE_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_CLOSED);
           if (ok) {
-            REMOVE_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_LOCKED);
-            REMOVE_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_CLOSED);
+            REMOVE_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_LOCKED);
+            REMOVE_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_CLOSED);
           }
           break;
         case 1:
           SET_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_CLOSED);
           REMOVE_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_LOCKED);
           if (ok) {
-            SET_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_CLOSED);
-            REMOVE_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_LOCKED);
+            SET_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_CLOSED);
+            REMOVE_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_LOCKED);
           }
           break;
         case 2:
           SET_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_LOCKED);
           SET_BIT(world[ZCMD.arg1].dir_option[ZCMD.arg2]->exit_info, EX_CLOSED);
           if (ok) {
-            SET_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_LOCKED);
-            SET_BIT(world[opposite].dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_CLOSED);
+            SET_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_LOCKED);
+            SET_BIT(opposite_room->dir_option[rev_dir[ZCMD.arg2]]->exit_info, EX_CLOSED);
           }
           break;
         }
@@ -3108,8 +3141,8 @@ int zone_is_empty(int zone_nr)
   struct descriptor_data *i;
 
   for (i = descriptor_list; i; i = i->next)
-    if (!i->connected && i->character->in_room != NOWHERE)
-      if (world[i->character->in_room].zone == zone_nr)
+    if (!i->connected && i->character->in_room)
+      if (i->character->in_room->zone == zone_nr)
         return 0;
 
   return 1;
@@ -3193,9 +3226,8 @@ char *fread_string(FILE * fl, char *error)
   /* FULLY initialize the buffer array. This is important, because you
   can't have garbage being read in. Doing the first byte isn't really good
   enough, and using memset or bzero is something I don't like. */
-  for (int x=0; x <= MAX_STRING_LENGTH; x++) {
-    buf[x] = '\0';
-  }
+  /* Yeah, except you can go fuck yourself, memset is literally designed for this task. -LS */
+  memset(buf, 0, sizeof(char) * (MAX_STRING_LENGTH+3));
 
   do {
     if (!fgets(tmp, 512, fl)) {
@@ -3611,7 +3643,7 @@ void reset_char(struct char_data * ch)
   ch->in_veh = NULL;
   ch->followers = NULL;
   ch->master = NULL;
-  ch->in_room = NOWHERE;
+  ch->in_room = NULL;
   ch->next = NULL;
   ch->next_fighting = NULL;
   ch->next_in_room = NULL;
@@ -3633,8 +3665,8 @@ void clear_char(struct char_data * ch)
   memset((char *) ch, 0, sizeof(struct char_data));
 
   ch->in_veh = NULL;
-  ch->in_room = NOWHERE;
-  GET_WAS_IN(ch) = NOWHERE;
+  ch->in_room = NULL;
+  GET_WAS_IN(ch) = NULL;
   GET_POS(ch) = POS_STANDING;
   ch->mob_specials.default_pos = POS_STANDING;
   if (ch->points.max_mental < 1000)
@@ -3649,7 +3681,7 @@ void clear_object(struct obj_data * obj)
 {
   memset((char *) obj, 0, sizeof(struct obj_data));
   obj->item_number = NOTHING;
-  obj->in_room = NOWHERE;
+  obj->in_room = NULL;
 }
 
 void clear_room(struct room_data *room)
@@ -3660,7 +3692,7 @@ void clear_room(struct room_data *room)
 void clear_vehicle(struct veh_data *veh)
 {
   memset((char *) veh, 0, sizeof(struct veh_data));
-  veh->in_room = NOWHERE;
+  veh->in_room = NULL;
 }
 
 void clear_host(struct host_data *host)
@@ -3952,8 +3984,8 @@ void purge_unowned_vehs() {
     
     // This vehicle is owned by a valid player: Do not delete.
     if (does_player_exist(veh->owner)) {
-      sprintf(buf, "Skipping vehicle '%s' (%ld) since its owner is a valid player.", veh->short_description, veh->idnum);
-      log(buf);
+      //sprintf(buf, "Skipping vehicle '%s' (%ld) since its owner is a valid player.", veh->short_description, veh->idnum);
+      //log(buf);
       
       if (!prior_veh) {
         break;
@@ -3973,8 +4005,8 @@ void purge_unowned_vehs() {
       sprintf(buf, "- Found '%s' (%ld) owned by %ld.", vict_veh->short_description, vict_veh->idnum, vict_veh->owner);
       
       // If the vehicle is in a room, disgorge there.
-      if (veh->in_room != NOWHERE) {
-        sprintf(ENDOF(buf), " Transferring to room %ld.", world[veh->in_room].number);
+      if (veh->in_room) {
+        sprintf(ENDOF(buf), " Transferring to room %ld.", veh->in_room->number);
         log(buf);
         veh_from_room(vict_veh);
         veh_to_room(vict_veh, veh->in_room);
@@ -3994,9 +4026,10 @@ void purge_unowned_vehs() {
         sprintf(buf, "SYSERR: Attempting to disgorge '%s' (%ld) from '%s' (%ld), but the latter has no containing vehicle (%ld) or location (%ld). Putting in Dante's.",
                 vict_veh->short_description, vict_veh->idnum,
                 veh->short_description, veh->idnum,
-                veh->in_veh ? veh->in_veh->idnum : -1, veh->in_room);
+                veh->in_veh ? veh->in_veh->idnum : -1,
+                veh->in_room ? veh->in_room->number : -1);
         log(buf);
-        veh_to_room(vict_veh, RM_DANTES_GARAGE);
+        veh_to_room(vict_veh, &world[real_room(RM_DANTES_GARAGE)]);
       }
     }
     
@@ -4048,7 +4081,7 @@ void load_saved_veh()
     veh->locked = TRUE;
     veh->sub = data.GetLong("VEHICLE/Subscribed", 0);
     if (!veh->spare2)
-      veh_to_room(veh, real_room(data.GetLong("VEHICLE/InRoom", 0)));
+      veh_to_room(veh, &world[real_room(data.GetLong("VEHICLE/InRoom", 0))]);
     veh->restring = str_dup(data.GetString("VEHICLE/VRestring", NULL));
     veh->restring_long = str_dup(data.GetString("VEHICLE/VRestringLong", NULL));
     int inside = 0, last_in = 0;
@@ -4209,8 +4242,8 @@ void load_consist(void)
   market[2] = paydata.GetInt("MARKET/Orange", 5000);
   market[3] = paydata.GetInt("MARKET/Red", 5000);
   market[4] = paydata.GetInt("MARKET/Black", 5000);
-  for (int nr = 0; nr < top_of_world; nr++)
-    if (ROOM_FLAGGED(nr, ROOM_STORAGE)) {
+  for (int nr = 0; nr <= top_of_world; nr++)
+    if (ROOM_FLAGGED(&world[nr], ROOM_STORAGE)) {
       sprintf(buf, "storage/%ld", world[nr].number);
       if (!(file.Open(buf, "r")))
         continue;
@@ -4256,7 +4289,7 @@ void load_consist(void)
             if (last_obj)
               obj_to_obj(obj, last_obj);
           } else
-            obj_to_room(obj, nr);
+            obj_to_room(obj, &world[nr]);
 
           last_in = inside;
           last_obj = obj;

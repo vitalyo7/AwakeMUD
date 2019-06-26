@@ -25,7 +25,6 @@
 extern MYSQL *mysql;
 
 // Prototypes from other files.
-char *prepare_quotes(char *dest, const char *str);
 int mysql_wrapper(MYSQL *mysql, const char *query);
 
 // The linked list of loaded playergroups.
@@ -48,6 +47,7 @@ idnum(0), bank(0), tag(NULL), name(NULL), alias(NULL)
   raw_set_tag(clone_strings_from->tag);
   raw_set_name(clone_strings_from->name);
   raw_set_alias(clone_strings_from->alias);
+  set_secret(clone_strings_from->is_secret());
   settings.SetBit(PGROUP_CLONE);
 }
 
@@ -101,7 +101,7 @@ bool iscolor(char c) {
 bool Playergroup::set_tag(const char *newtag, struct char_data *ch) {
   // TODO: Validity checks.
   if (strlen(newtag) > MAX_PGROUP_TAG_LENGTH) {
-    send_to_char(ch, "Sorry, tags can't be longer than %d characters.\r\n", MAX_PGROUP_TAG_LENGTH);
+    send_to_char(ch, "Sorry, tag strings can't be longer than %d characters.\r\n", MAX_PGROUP_TAG_LENGTH);
     return FALSE;
   }
   
@@ -110,7 +110,7 @@ bool Playergroup::set_tag(const char *newtag, struct char_data *ch) {
   while (*ptr) {
     if (*ptr == '^') {
       if (*(ptr+1) == '\0') {
-        send_to_char("Sorry, tags can't end with the ^ character.\r\n", ch);
+        send_to_char("Sorry, tag strings can't end with the ^ character.\r\n", ch);
         return FALSE;
       }
       else if (iscolor(*(ptr+1)))
@@ -131,10 +131,8 @@ bool Playergroup::set_tag(const char *newtag, struct char_data *ch) {
   }
   
   if (len > MAX_PGROUP_TAG_LENGTH_WITHOUT_COLOR) {
-    send_to_char(ch, "Sorry, the non-colorized part of tags can't be longer than %d characters.\r\n",
+    send_to_char(ch, "Sorry, the non-color-code parts of tags can't be longer than %d characters.\r\n",
                  MAX_PGROUP_TAG_LENGTH_WITHOUT_COLOR);
-    sprintf(buf, "Sorry, tags can't be longer than %d characters.\r\n", MAX_PGROUP_TAG_LENGTH);
-    send_to_char(buf, ch);
     return FALSE;
   }
   
@@ -177,7 +175,7 @@ bool Playergroup::set_alias(const char *newalias, struct char_data *ch) {
   
   // Check for duplicates.
   char querybuf[MAX_STRING_LENGTH];
-  sprintf(querybuf, "SELECT idnum FROM playergroups WHERE alias = '%s'", prepare_quotes(buf, newalias));
+  sprintf(querybuf, "SELECT idnum FROM playergroups WHERE alias = '%s'", prepare_quotes(buf, newalias, sizeof(buf) / sizeof(buf[0])));
   mysql_wrapper(mysql, querybuf);
   MYSQL_RES *res = mysql_use_result(mysql);
   MYSQL_ROW row;
@@ -234,7 +232,7 @@ void Playergroup::set_bank(unsigned long amount) {
 }
 
 /************* Misc Methods *************/
-void Playergroup::audit_log(const char *original_msg) {
+void Playergroup::audit_log(const char *original_msg, bool is_redacted) {
   char msg[MAX_STRING_LENGTH];
   char query_buf[MAX_STRING_LENGTH];
   
@@ -246,16 +244,29 @@ void Playergroup::audit_log(const char *original_msg) {
   
   // Quote the message for some pretense of DB safety.
   char quoted_msg[strlen(msg) * 2 + 1];
-  prepare_quotes(quoted_msg, msg);
+  prepare_quotes(quoted_msg, msg, sizeof(quoted_msg) / sizeof(quoted_msg[0]));
   
-  // Format the query and execute it.
-  const char *query_fmt = "INSERT INTO pgroup_logs (`idnum`, `message`, `date`) VALUES ('%ld', '%s', NOW())";
-  sprintf(query_buf, query_fmt, get_idnum(), quoted_msg);
-  mysql_wrapper(mysql, query_buf);
+  if (is_redacted) {
+    // Format the query and execute it.
+    const char *query_fmt = "INSERT INTO pgroup_logs (`idnum`, `message`, `date`, `redacted`) VALUES ('%ld', '%s', NOW(), TRUE)";
+    sprintf(query_buf, query_fmt, get_idnum(), quoted_msg);
+    mysql_wrapper(mysql, query_buf);
+    
+    // Don't log it-- we only want the unredacted one sent to imms.
+  } else {
+    // Format the query and execute it.
+    const char *query_fmt = "INSERT INTO pgroup_logs (`idnum`, `message`, `date`, `redacted`) VALUES ('%ld', '%s', NOW(), FALSE)";
+    sprintf(query_buf, query_fmt, get_idnum(), quoted_msg);
+    mysql_wrapper(mysql, query_buf);
   
   // Reuse the query buf to format the message for MUD-level logging.
-  sprintf(query_buf, "[%s (%ld)]: %s", get_alias(), get_idnum(), msg);
-  mudlog(query_buf, NULL, LOG_PGROUPLOG, TRUE);
+    sprintf(query_buf, "[%s (%ld)]: %s", get_alias(), get_idnum(), msg);
+    mudlog(query_buf, NULL, LOG_PGROUPLOG, TRUE);
+  }
+}
+
+void Playergroup::secret_log(const char *original_msg) {
+  audit_log(original_msg, TRUE);
 }
 
 void Playergroup::audit_log_vfprintf(const char *format, ...)
@@ -267,7 +278,36 @@ void Playergroup::audit_log_vfprintf(const char *format, ...)
   vsprintf(playergroup_log_buf, format, args);
   va_end(args);
   
-  audit_log(playergroup_log_buf);
+  audit_log(playergroup_log_buf, FALSE);
+}
+
+void Playergroup::secret_log_vfprintf(const char *format, ...)
+{
+  // The expectation is that anything you feed to this log is redacted.
+  char playergroup_log_buf[MAX_STRING_LENGTH];
+  va_list args;
+  
+  va_start(args, format);
+  vsprintf(playergroup_log_buf, format, args);
+  va_end(args);
+  
+  audit_log(playergroup_log_buf, TRUE);
+}
+
+const char *Playergroup::render_settings() {
+  static char settings_string[100];
+  strcpy(settings_string, "");
+  bool is_first = TRUE;
+  
+  for (int index = 0; index < NUM_PGROUP_SETTINGS; index++) {
+    if (index != PGROUP_CLONE && settings.IsSet(index)) {
+      sprintf(ENDOF(settings_string), "%s%s", is_first ? "" : ", ", pgroup_settings[index]);
+    }
+  }
+  if (is_first)
+    strcpy(settings_string, "(none)");
+  
+  return settings_string;
 }
 
 // Saves the playergroup to the database.
@@ -294,10 +334,10 @@ bool Playergroup::save_pgroup_to_db() {
   
   sprintf(querybuf, pgroup_save_query_format,
           idnum,
-          prepare_quotes(quotedname, name),
-          prepare_quotes(quotedalias, alias),
-          prepare_quotes(quotedtag, tag),
-          prepare_quotes(quotedsettings, settings.ToString()),
+          prepare_quotes(quotedname, name, sizeof(quotedname) / sizeof(quotedname[0])),
+          prepare_quotes(quotedalias, alias, sizeof(quotedalias) / sizeof(quotedalias[0])),
+          prepare_quotes(quotedtag, tag, sizeof(quotedtag) / sizeof(quotedtag[0])),
+          prepare_quotes(quotedsettings, settings.ToString(), sizeof(quotedsettings) / sizeof(quotedsettings[0])),
           bank);
   mysql_wrapper(mysql, querybuf);
   
@@ -378,7 +418,7 @@ void Playergroup::invite(struct char_data *ch, char *argument) {
     send_to_char("They can't hear you.\r\n", ch);
   } else if (GET_TKE(target) < 100) {
     send_to_char("That person isn't experienced enough to be a valuable addition to your group yet.\r\n", ch);
-  } else if (GET_PGROUP_DATA(target) && GET_PGROUP(target) && GET_PGROUP(target) == GET_PGROUP(ch)) {
+  } else if (GET_PGROUP_MEMBER_DATA(target) && GET_PGROUP(target) && GET_PGROUP(target) == GET_PGROUP(ch)) {
     send_to_char("They're already part of your group!\r\n", ch);
     // TODO: If the group is secret, this is info disclosure.
   } else if (FALSE) {
@@ -397,7 +437,7 @@ void Playergroup::invite(struct char_data *ch, char *argument) {
     
     strcpy(buf, "You invite $N to join your group.");
     act(buf, FALSE, ch, NULL, target, TO_CHAR);
-    sprintf(buf, "$n has invited you to join their playergroup, '%s'.", get_name());
+    sprintf(buf, "$n has invited you to join their playergroup, '%s'. You can ACCEPT or DECLINE this at any time in the next %d days.", get_name(), PGROUP_INVITATION_LIFETIME_IN_DAYS);
     act(buf, FALSE, ch, NULL, target, TO_VICT);
     
     // TODO: What if the group is secret? Is this okay?
@@ -420,21 +460,21 @@ void Playergroup::add_member(struct char_data *ch) {
   if (IS_NPC(ch))
     return;
   
-  if (GET_PGROUP_DATA(ch)) {
+  if (GET_PGROUP_MEMBER_DATA(ch)) {
     if (GET_PGROUP(ch)) {
       log_vfprintf("WARNING: add_member called on %s for group %s when they were already part of %s.",
           GET_CHAR_NAME(ch), get_name(), GET_PGROUP(ch)->get_name());
     } else {
       log("SYSERR: overriding add_member call, also %s had pgroup_data but no pgroup.");
     }
-    delete GET_PGROUP_DATA(ch);
+    delete GET_PGROUP_MEMBER_DATA(ch);
   }
-  GET_PGROUP_DATA(ch) = new Pgroup_data();
-  GET_PGROUP_DATA(ch)->pgroup = this;
-  GET_PGROUP_DATA(ch)->rank = 1;
-  if (GET_PGROUP_DATA(ch)->title)
-    delete GET_PGROUP_DATA(ch)->title;
-  GET_PGROUP_DATA(ch)->title = str_dup("Member");
+  GET_PGROUP_MEMBER_DATA(ch) = new Pgroup_data();
+  GET_PGROUP_MEMBER_DATA(ch)->pgroup = this;
+  GET_PGROUP_MEMBER_DATA(ch)->rank = 1;
+  if (GET_PGROUP_MEMBER_DATA(ch)->title)
+    delete GET_PGROUP_MEMBER_DATA(ch)->title;
+  GET_PGROUP_MEMBER_DATA(ch)->title = str_dup("Member");
   
   // Save the character.
   playerDB.SaveChar(ch);
@@ -470,15 +510,15 @@ void Playergroup::remove_member(struct char_data *ch) {
   if (IS_NPC(ch))
     return;
   
-  if (!GET_PGROUP_DATA(ch) || !GET_PGROUP(ch)) {
+  if (!GET_PGROUP_MEMBER_DATA(ch) || !GET_PGROUP(ch)) {
     log_vfprintf("SYSERR: pgroup->remove_member() called on %s, who does not have an associated group.",
                  GET_CHAR_NAME(ch));
     return;
   }
   
   // TODO: DB updates.
-  delete GET_PGROUP_DATA(ch);
-  GET_PGROUP_DATA(ch) = NULL;
+  delete GET_PGROUP_MEMBER_DATA(ch);
+  GET_PGROUP_MEMBER_DATA(ch) = NULL;
   
   // Save the character.
   playerDB.SaveChar(ch);
@@ -489,14 +529,14 @@ Pgroup_invitation::Pgroup_invitation() :
 pg(NULL), pg_idnum(0), prev(NULL), next(NULL)
 {
   expires_on = calculate_expiration();
-  log_vfprintf("Expiration calculated as %ld seconds.", expires_on);
+  // log_vfprintf("Expiration calculated as %ld seconds.", expires_on);
 }
 
 Pgroup_invitation::Pgroup_invitation(long idnum) :
 pg(NULL), pg_idnum(idnum), prev(NULL), next(NULL)
 {
   expires_on = calculate_expiration();
-  log_vfprintf("Expiration calculated as %ld seconds.", expires_on);
+  // log_vfprintf("Expiration calculated as %ld seconds.", expires_on);
 }
 
 Pgroup_invitation::Pgroup_invitation(long idnum, time_t expiration) :
@@ -527,7 +567,7 @@ time_t Pgroup_invitation::calculate_expiration() {
   time_t current_time;
   time(&current_time);
   struct tm* tm = localtime(&current_time);
-  tm->tm_mday += 7;
+  tm->tm_mday += PGROUP_INVITATION_LIFETIME_IN_DAYS;
   return mktime(tm);
 }
 

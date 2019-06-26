@@ -96,7 +96,7 @@ static void init_char(struct char_data * ch)
   ch->player_specials->saved.bad_pws      = 0;
 
   GET_LOADROOM(ch) = NOWHERE;
-  GET_WAS_IN(ch) = NOWHERE;
+  GET_WAS_IN(ch) = NULL;
 
   ch->player.time.birth = time(0);
   ch->player.time.played = 0;
@@ -127,12 +127,12 @@ static void init_char(struct char_data * ch)
   }
 
   if (!access_level(ch, LVL_VICEPRES))
-    for (i = 1; i <= MAX_SKILLS; i++)
+    for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
     {
       SET_SKILL(ch, i, 0)
     }
   else
-    for (i = 1; i <= MAX_SKILLS; i++)
+    for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
     {
       SET_SKILL(ch, i, 100);
     }
@@ -252,14 +252,19 @@ static void init_char_strings(char_data *ch)
 }
 
 // Eventual TODO: https://dev.mysql.com/doc/refman/5.7/en/mysql-real-escape-string-quote.html
-char *prepare_quotes(char *dest, const char *str)
+char *prepare_quotes(char *dest, const char *str, size_t size_of_dest)
 {
   if (!str)
     return NULL;
   char *temp = &dest[0];
   while (*str) {
-    if (*str == '\'' || *str == '`' || *str == '"' || *str == '\\' || *str == '%')
+    if ((unsigned long) (temp - dest) >= size_of_dest - 2) {
+      // Die to protect memory / database.
+      terminate_mud_process_with_message("prepare_quotes would overflow dest buf", ERROR_ARRAY_OUT_OF_BOUNDS);
+    }
+    if (*str == '\'' || *str == '`' || *str == '"' || *str == '\\' || *str == '%') {
       *temp++ = '\\';
+    }
     *temp++ = *str++;
   }
   *temp = '\0';
@@ -328,7 +333,7 @@ void advance_level(struct char_data * ch)
 bool load_char(const char *name, char_data *ch, bool logon)
 {
   init_char(ch);
-  for (int i = 1; i <= MAX_SKILLS; i++)
+  for (int i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
     GET_SKILL(ch, i) = 0;
   ch->char_specials.carry_weight = 0;
   ch->char_specials.carry_items = 0;
@@ -819,9 +824,9 @@ bool load_char(const char *name, char_data *ch, bool logon)
   res = mysql_use_result(mysql);
   if (res && (row = mysql_fetch_row(res))) {
     long pgroup_idnum = atol(row[1]);
-    GET_PGROUP_DATA(ch) = new Pgroup_data();
-    GET_PGROUP_DATA(ch)->rank = atoi(row[2]);
-    GET_PGROUP_DATA(ch)->privileges.FromString(row[3]);
+    GET_PGROUP_MEMBER_DATA(ch) = new Pgroup_data();
+    GET_PGROUP_MEMBER_DATA(ch)->rank = atoi(row[2]);
+    GET_PGROUP_MEMBER_DATA(ch)->privileges.FromString(row[3]);
     mysql_free_result(res);
   
     // TODO: Find the pgroup in the list. If it's not there, load it.
@@ -843,7 +848,7 @@ bool load_char(const char *name, char_data *ch, bool logon)
     }
     
     // Initialize character pgroup struct.
-    GET_PGROUP_DATA(ch)->pgroup = ptr;
+    GET_PGROUP_MEMBER_DATA(ch)->pgroup = ptr;
   } else {
     mysql_free_result(res);
   }
@@ -997,18 +1002,27 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
   if (loadroom == NOWHERE)
     loadroom = GET_LOADROOM(player);
 
-  if (player->in_room != NOWHERE) {
-    /* This code means that any imm who does GOTO 1 is going to have weird behavior. Beats crashing, though. */
-    if (world[player->in_room].number <= 1) {
-      if (player->was_in_room < 0) {
-        sprintf(buf, "SYSERR: save_char(): %s is at %ld and has was_in_room (world array index) %ld.",
-                GET_CHAR_NAME(player), world[player->in_room].number, player->was_in_room);
-        mudlog(buf, NULL, LOG_SYSLOG, TRUE);
-        GET_LAST_IN(player) = 35500;
-      } else
-        GET_LAST_IN(player) = world[player->was_in_room].number;
+  if (player->in_room) {
+    if (player->in_room->number <= 1) {
+      // If their current room is invalid for save/load:
+      if (player->was_in_room) {
+        if (player->was_in_room->number <= 1) {
+          // Their was_in_room is invalid; put them at Dante's.
+          sprintf(buf, "SYSERR: save_char(): %s is at %ld and has was_in_room (world array index) %ld.",
+                  GET_CHAR_NAME(player), player->in_room->number, player->was_in_room->number);
+          mudlog(buf, NULL, LOG_SYSLOG, TRUE);
+          GET_LAST_IN(player) = RM_ENTRANCE_TO_DANTES;
+        } else {
+          // Their was_in_room is valid, so put them there.
+          GET_LAST_IN(player) = player->was_in_room->number;
+        }
+      } else {
+        // They have no was_in_room, so put them at Dante's.
+        GET_LAST_IN(player) = RM_ENTRANCE_TO_DANTES;
+      }
     } else {
-      GET_LAST_IN(player) = world[player->in_room].number;
+      // Their in_room is valid, so put them there.
+      GET_LAST_IN(player) = player->in_room->number;
     }
   }
 
@@ -1016,7 +1030,7 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
     inveh = player->in_veh->idnum;
   
   long pgroup_num = 0;
-  if (GET_PGROUP_DATA(player) && GET_PGROUP(player))
+  if (GET_PGROUP_MEMBER_DATA(player) && GET_PGROUP(player))
     pgroup_num = GET_PGROUP(player)->get_idnum();
   
   sprintf(buf, "UPDATE pfiles SET AffFlags='%s', PlrFlags='%s', PrfFlags='%s', Bod=%d, "\
@@ -1070,7 +1084,7 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
     sprintf(buf, "DELETE FROM pfiles_skills WHERE idnum=%ld", GET_IDNUM(player));
     mysql_wrapper(mysql, buf);
     strcpy(buf, "INSERT INTO pfiles_skills (idnum, skillnum, rank) VALUES (");
-    for (i = 0; i <= MAX_SKILLS; i++)
+    for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
       if (GET_SKILL(player, i)) {
         if (q)
           strcat(buf, "), (");
@@ -1202,7 +1216,7 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
   for (struct remem *b = GET_MEMORY(player); b; b = b->next) {
     if (q)
       strcat(buf, "), (");
-    sprintf(ENDOF(buf), "%ld, %ld, '%s'", GET_IDNUM(player), b->idnum, prepare_quotes(buf3, b->mem));
+    sprintf(ENDOF(buf), "%ld, %ld, '%s'", GET_IDNUM(player), b->idnum, prepare_quotes(buf3, b->mem, sizeof(buf3) / sizeof(buf3[0])));
     q = 1;
   }
   if (q) {
@@ -1232,7 +1246,7 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
   for (struct alias *a = GET_ALIASES(player); a; a = a->next) {
     if (q)
       strcat(buf, "), (");
-    sprintf(ENDOF(buf), "%ld, '%s', '%s'", GET_IDNUM(player), a->command, prepare_quotes(buf3, a->replacement));
+    sprintf(ENDOF(buf), "%ld, '%s', '%s'", GET_IDNUM(player), a->command, prepare_quotes(buf3, a->replacement, sizeof(buf3) / sizeof(buf3[0])));
     q = 1;
   }
   if (q) {
@@ -1273,7 +1287,8 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
     bool first_pass = TRUE;
     for (struct obj_data *obj = player->cyberware; obj;) {
       sprintf(ENDOF(buf), "%s(%ld, %ld, %d, '%s', '%s'", first_pass ? "" : ", ", GET_IDNUM(player), GET_OBJ_VNUM(obj), GET_OBJ_COST(obj),
-                          obj->restring ? prepare_quotes(buf3, obj->restring) : "", obj->photo ? prepare_quotes(buf2, obj->photo) : "");
+                          obj->restring ? prepare_quotes(buf3, obj->restring, sizeof(buf3) / sizeof(buf3[0])) : "",
+                          obj->photo ? prepare_quotes(buf2, obj->photo, sizeof(buf2) / sizeof(buf2[0])) : "");
       first_pass = FALSE;
       q = 1;
       
@@ -1318,7 +1333,8 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
       strcpy(buf, "INSERT INTO pfiles_worn (idnum, Vnum, Cost, Restring, Photo, Value0, Value1, Value2, Value3, Value4, Value5, Value6,"\
               "Value7, Value8, Value9, Value10, Value11, Inside, Position, Timer, ExtraFlags, Attempt, Cond, posi) VALUES (");
       sprintf(ENDOF(buf), "%ld, %ld, %d, '%s', '%s'", GET_IDNUM(player), GET_OBJ_VNUM(obj), GET_OBJ_COST(obj),
-                          obj->restring ? prepare_quotes(buf3, obj->restring) : "", obj->photo ? prepare_quotes(buf2, obj->photo) : "");
+                          obj->restring ? prepare_quotes(buf3, obj->restring, sizeof(buf3) / sizeof(buf3[0])) : "",
+                          obj->photo ? prepare_quotes(buf2, obj->photo, sizeof(buf2) / sizeof(buf2[0])) : "");
       for (int x = 0; x < NUM_VALUES; x++)
         sprintf(ENDOF(buf), ", %d", GET_OBJ_VAL(obj, x));
       sprintf(ENDOF(buf), ", %d, %d, %d, '%s', %d, %d, %d);", level, i, GET_OBJ_TIMER(obj), GET_OBJ_EXTRA(obj).ToString(), 
@@ -1355,7 +1371,8 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
       strcpy(buf, "INSERT INTO pfiles_inv (idnum, Vnum, Cost, Restring, Photo, Value0, Value1, Value2, Value3, Value4, Value5, Value6,"\
               "Value7, Value8, Value9, Value10, Value11, Inside, Timer, ExtraFlags, Attempt, Cond, posi) VALUES (");
       sprintf(ENDOF(buf), "%ld, %ld, %d, '%s', '%s'", GET_IDNUM(player), GET_OBJ_VNUM(obj), GET_OBJ_COST(obj),
-                          obj->restring ? prepare_quotes(buf3, obj->restring) : "", obj->photo ? prepare_quotes(buf2, obj->photo) : "");
+                          obj->restring ? prepare_quotes(buf3, obj->restring, sizeof(buf3) / sizeof(buf3[0])) : "",
+                          obj->photo ? prepare_quotes(buf2, obj->photo, sizeof(buf2) / sizeof(buf2[0])) : "");
       for (int x = 0; x < NUM_VALUES; x++)
         sprintf(ENDOF(buf), ", %d", GET_OBJ_VAL(obj, x));
       sprintf(ENDOF(buf), ", %d, %d, '%s', %d, %d, %d);", level, GET_OBJ_TIMER(obj), GET_OBJ_EXTRA(obj).ToString(), 
@@ -1383,7 +1400,7 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
   }
   
   // Save pgroup membership data.
-  if (GET_PGROUP_DATA(player) && GET_PGROUP(player)) {
+  if (GET_PGROUP_MEMBER_DATA(player) && GET_PGROUP(player)) {
     sprintf(buf, "INSERT INTO pfiles_playergroups (`idnum`, `group`, `Rank`, `Privileges`) VALUES ('%ld', '%ld', '%d', '%s')"
                  " ON DUPLICATE KEY UPDATE"
                  "   `group` = VALUES(`group`),"
@@ -1391,8 +1408,8 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
                  "   `Privileges` = VALUES(`Privileges`)",
                  GET_IDNUM(player),
                  GET_PGROUP(player)->get_idnum(),
-                 GET_PGROUP_DATA(player)->rank,
-                 GET_PGROUP_DATA(player)->privileges.ToString());
+                 GET_PGROUP_MEMBER_DATA(player)->rank,
+                 GET_PGROUP_MEMBER_DATA(player)->privileges.ToString());
     mysql_wrapper(mysql, buf);
   }
 
@@ -1839,6 +1856,24 @@ void DeleteChar(long idx)
   mysql_wrapper(mysql, buf);
   sprintf(buf, "DELETE FROM pfiles_memory WHERE remembered=%ld", idx);
   mysql_wrapper(mysql, buf);
+  
+  // Update playergroup info.
+  sprintf(buf, "SELECT group FROM pfiles_playergroups WHERE idnum=%ld", idx);
+  mysql_wrapper(mysql, buf);
+  MYSQL_RES *res = mysql_use_result(mysql);
+  MYSQL_ROW row;
+  if ((row = mysql_fetch_row(res))) {
+    mysql_free_result(res);
+    sprintf(buf, "INSERT INTO pgroup_logs (idnum, message) VALUES (%ld, \"%s has left the group. (Reason: deletion)\")", atol(row[0]), get_player_name(idx));
+    mysql_wrapper(mysql, buf);
+    sprintf(buf, "DELETE FROM pfiles_playergroups WHERE idnum=%ld", idx);
+    mysql_wrapper(mysql, buf);
+  } else {
+    mysql_free_result(res);
+  }
+  sprintf(buf, "DELETE FROM playergroup_invitations WHERE idnum=%ld", idx);
+  mysql_wrapper(mysql, buf);
+  
   sprintf(buf, "UPDATE pfiles SET Name='deleted', Password='', NoDelete=TRUE WHERE idnum=%ld", idx); 
 //  sprintf(buf, "DELETE FROM pfiles WHERE idnum=%ld", idx);
   mysql_wrapper(mysql, buf);

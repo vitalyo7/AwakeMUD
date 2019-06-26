@@ -88,7 +88,7 @@ struct obj_affected_type
 struct obj_data
 {
   rnum_t item_number;         /* Where in data-base                   */
-  rnum_t in_room;            /* In what room -1 when conta/carr      */
+  struct room_data *in_room;      /* Pointer to the room the object is in. */
   struct veh_data *in_veh;
   bool vfront;
 
@@ -111,8 +111,13 @@ struct obj_data
   
   struct char_data *targ;	  /* Data for mounts */
   struct veh_data *tveh;
+  
+#ifdef USE_DEBUG_CANARIES
+  // No sense in initializing the value since it's memset to 0 in most invocations.
+  int canary;
+#endif
   obj_data() :
-      in_veh(NULL), ex_description(NULL), restring(NULL), photo(NULL), graffiti(NULL), carried_by(NULL),
+      in_room(NULL), in_veh(NULL), ex_description(NULL), restring(NULL), photo(NULL), graffiti(NULL), carried_by(NULL),
       worn_by(NULL), in_obj(NULL), contains(NULL), next_content(NULL), targ(NULL), tveh(NULL)
   {}
 };
@@ -128,7 +133,7 @@ struct room_direction_data
 
   sh_int exit_info;            /* Exit info                            */
   vnum_t key;                 /* Key's number (-1 for no key)         */
-  rnum_t to_room;            /* Where direction leads (NOWHERE)      */
+  struct room_data *to_room;            /* Where direction leads (NOWHERE)      */
   sh_int key_level;            /* Level of electronic lock             */
   int ward;
   long idnum;
@@ -137,9 +142,13 @@ struct room_direction_data
   byte barrier;                /* barrier rating                       */
   byte condition;      // current barrier rating
   vnum_t to_room_vnum;       /* the vnum of the room. Used for OLC   */
-
+  
+#ifdef USE_DEBUG_CANARIES
+  // No sense in initializing the value since it's memset to 0 in most invocations.
+  int canary;
+#endif
   room_direction_data() :
-      general_description(NULL), keyword(NULL), exit_info(0), key(0), to_room(NOWHERE),
+      general_description(NULL), keyword(NULL), exit_info(0), key(0), to_room(NULL),
       key_level(0), ward(0), idnum(0), hidden(0), material(0), barrier(0), condition(0), to_room_vnum(NOWHERE)
   {}
 }
@@ -187,7 +196,11 @@ struct room_data
   struct char_data *watching;
   
   struct obj_data *best_workshop[NUM_WORKSHOP_TYPES];
-
+  
+#ifdef USE_DEBUG_CANARIES
+  // No sense in initializing the value since it's memset to 0 in most invocations.
+  int canary;
+#endif
   room_data() :
       name(NULL), description(NULL), night_desc(NULL), ex_description(NULL),
       temporary_stored_exit(NULL), matrix(0), access(0), io(0), trace(0),
@@ -495,12 +508,12 @@ struct player_special_data
   ubyte mental_loss;
   ubyte physical_loss;
   ubyte perm_bod;
-  rnum_t watching;
+  struct room_data *watching;
   struct remem *ignored;
 
   player_special_data() :
       aliases(NULL), remem(NULL), last_tell(0),
-      questnum(0), obj_complete(NULL), mob_complete(NULL), ignored(NULL)
+      questnum(0), obj_complete(NULL), mob_complete(NULL), watching(NULL), ignored(NULL)
   {}
 }
 ;
@@ -565,7 +578,7 @@ struct grid_data
 struct veh_data
 {
   vnum_t veh_number;         /* Where in data-base                   */
-  rnum_t in_room;            /* In what room -1 when conta/carr      */
+  struct room_data *in_room;            /* In what room */
 
   char *name;
   char *description;              /* When in room (without driver)    */
@@ -597,7 +610,7 @@ struct veh_data
   struct veh_follow *followers;
   struct veh_data *following;
   struct char_data *followch;
-  long lastin[3];
+  struct room_data *lastin[3];
 
   struct obj_data *mount;
   struct obj_data *mod[NUM_MODS];
@@ -607,7 +620,7 @@ struct veh_data
   long owner;
   long spare, spare2;
   bool locked;
-  vnum_t dest;
+  struct room_data *dest;
   Bitfield flags;
 
   struct obj_data *contents;
@@ -624,12 +637,13 @@ struct veh_data
   char *leave;
   char *arrive;
   struct veh_data *next;
+  
 
   veh_data() :
-      name(NULL), description(NULL), short_description(NULL), restring(NULL),
+      in_room(NULL), name(NULL), description(NULL), short_description(NULL), restring(NULL),
       long_description(NULL), restring_long(NULL), inside_description(NULL), rear_description(NULL),
       followers(NULL), following(NULL), followch(NULL), mount(NULL),
-      idnum(0), owner(0), spare(0), spare2(0), dest(0),
+      idnum(0), owner(0), spare(0), spare2(0), dest(NULL),
       contents(NULL), people(NULL), rigger(NULL), fighting(NULL), fight_veh(NULL), next_veh(NULL),
       next_sub(NULL), carriedvehs(NULL), in_veh(NULL), towing(NULL), grid(NULL), 
       leave(NULL), arrive(NULL), next(NULL)
@@ -645,8 +659,8 @@ struct char_data
 {
   long nr;                            /* Mob's rnum                    */
   // the previous will be DEFUNCT once MobIndex is written
-  rnum_t in_room;                     /* Location (real room number)   */
-  rnum_t was_in_room;                 /* location for linkdead people  */
+  struct room_data *in_room;                     /* Location */
+  struct room_data *was_in_room;                 /* location for linkdead people  */
 
   struct char_player_data player;       /* Normal data                   */
   struct char_ability_data real_abils;  /* Abilities without modifiers   */
@@ -686,8 +700,8 @@ struct char_data
 
 
   char_data() :
-      player_specials(NULL), in_veh(NULL), persona(NULL), squeue(NULL), sustained(NULL), ssust(NULL),
-      carrying(NULL), desc(NULL), cyberware(NULL), bioware(NULL), next_in_room(NULL), next(NULL),
+      in_room(NULL), was_in_room(NULL), player_specials(NULL), in_veh(NULL), persona(NULL), squeue(NULL), sustained(NULL),
+      ssust(NULL), carrying(NULL), desc(NULL), cyberware(NULL), bioware(NULL), next_in_room(NULL), next(NULL),
       next_fighting(NULL), next_in_zone(NULL), next_in_veh(NULL), next_watching(NULL), followers(NULL),
       master(NULL), spells(NULL), pgroup(NULL), pgroup_invitations(NULL)
   {

@@ -365,7 +365,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
         new_mob_index = new struct index_data[top_of_mobt + 2];
         new_mob_proto = new struct char_data[top_of_mobt + 2];
         // count through the tables
-        for (counter = 0; counter < top_of_mobt + 1; counter++) {
+        for (counter = 0; counter <= top_of_mobt; counter++) {
           /* if we haven't found it */
           if (!found) {
             /* check if current virtual is bigger than our virtual */
@@ -377,7 +377,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
               new_mob_index[counter].func = NULL;
               /*---------*/
               new_mob_proto[counter] = *(d->edit_mob);
-              new_mob_proto[counter].in_room = NOWHERE;
+              new_mob_proto[counter].in_room = NULL;
               /* it is now safe (and necessary!) to assign real number to
                * the edit_mob, which has been -1 all this time */
               d->edit_mob->nr = counter;
@@ -412,7 +412,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
 
           clear_char(new_mob_proto + top_of_mobt + 1);
           new_mob_proto[top_of_mobt + 1] = *(d->edit_mob);
-          new_mob_proto[top_of_mobt + 1].in_room = NOWHERE;
+          new_mob_proto[top_of_mobt + 1].in_room = NULL;
           new_mob_proto[top_of_mobt + 1].nr = top_of_mobt + 1;
           /* it is now safe (and necessary!) to assign real number to
            * the edit_mob, which has been -1 all this time */

@@ -476,7 +476,7 @@ enum {
 #define ROOM_NOMAGIC            7   /* Magic not allowed         */
 #define ROOM_TUNNEL             8   /* room for only 1 pers      */
 #define ROOM_ARENA              9   /* Can't teleport in         */
-#define ROOM_LIT                10  /* Room has a streetlight    */
+#define ROOM_STREETLIGHTS       10  /* Room has a streetlight    */
 #define ROOM_HOUSE              11  /* (R) Room is a house       */
 #define ROOM_HOUSE_CRASH        12  /* (R) House needs saving    */
 #define ROOM_ATRIUM             13  /* (R) The door to a house   */
@@ -489,7 +489,7 @@ enum {
 #define ROOM_FALL               21  // room is a 'fall' room
 #define ROOM_ROAD               22
 #define ROOM_GARAGE             23
-#define ROOM_SENATE             24
+#define ROOM_STAFF_ONLY         24
 #define ROOM_NOQUIT             25
 #define ROOM_SENT               26
 #define ROOM_ASTRAL 	       	  27 // Astral room
@@ -521,6 +521,7 @@ enum {
 #define EX_PICKPROOF            (1 << 3)   /* Lock can't be picked      */
 #define EX_DESTROYED            (1 << 4)   /* door has been destroyed   */
 #define EX_HIDDEN               (1 << 5)   /* exit is hidden            */
+#define EX_ASTRALLY_WARDED      (1 << 6)   /* Exit blocks passage of astral beings */
 
 
 /* spirit powers */
@@ -622,9 +623,23 @@ enum {
 #define MASK_DUAL		(1 << 2)
 #define MASK_COMPLETE		(1 << 3)
 
-#define AURA_POWERSITE		13
-#define AURA_PLAYERCOMBAT	15
-#define AURA_PLAYERDEATH	16
+#define AURA_VIOLENCE      0
+#define AURA_TORTURE       1
+#define AURA_HATRED        2
+#define AURA_GENOCIDE      3
+#define AURA_RITUAL_MAGIC  4
+#define AURA_SACRIFICE     5
+#define AURA_WORSHIP       6
+#define AURA_DEATH         7
+#define AURA_POLLUTION     8
+#define AURA_CONCENTRATED  9
+#define AURA_LOST_HUMANITY 10
+#define AURA_STERILITY     11
+#define AURA_CONFUSION     12
+#define AURA_POWERSITE		 13
+#define AURA_BLOOD_MAGIC   14
+#define AURA_PLAYERCOMBAT	 15
+#define AURA_PLAYERDEATH	 16
 
 #define COMBAT			1
 #define DETECTION		2
@@ -1019,7 +1034,8 @@ enum {
 #define ITEM_DESIGN	        40
 #define ITEM_QUEST	        41
 #define ITEM_GUN_AMMO	      42
-#define NUM_ITEMS	          43
+#define ITEM_KEYRING        43
+#define NUM_ITEMS	          44
 
 
 /* take/wear flags: used by obj_data.obj_flags.wear_flags */
@@ -1946,7 +1962,7 @@ enum {
 #define SMALL_BUFSIZE             1024
 #define LARGE_BUFSIZE    (MAX_SOCK_BUF - GARBAGE_SPACE - MAX_PROMPT_LENGTH)
 
-#define MAX_STRING_LENGTH         8192
+#define MAX_STRING_LENGTH         32768
 #define MAX_INPUT_LENGTH          2048     /* Max length per *line* of input */
 #define MAX_RAW_INPUT_LENGTH      4096     /* Max size of *raw* input */
 #define MAX_MESSAGES              100
@@ -1978,24 +1994,34 @@ enum {
 // End new combat modifiers.
 
 // Locations, to remove the magic numbers from the code.
-#define RM_CHARGEN_START_ROOM      60500
-#define RM_NEWBIE_LOADROOM         60565 // The Neophyte Hotel.
-#define RM_NEWBIE_LOBBY            60563
-#define RM_ENTRANCE_TO_DANTES      35500
-#define RM_DANTES_GARAGE           35693
-#define RM_DANTES_GARAGE_RANDOM    35693 + number(0,4)
-#define RM_DANTES_DESCENT          35502
-#define RM_SEATTLE_DOCWAGON        RM_ENTRANCE_TO_DANTES
-#define RM_PORTLAND_DOCWAGON       RM_ENTRANCE_TO_DANTES
-#define RM_CARIB_DOCWAGON          RM_ENTRANCE_TO_DANTES
-#define RM_OCEAN_DOCWAGON          RM_ENTRANCE_TO_DANTES
-#define RM_SEATTLE_PARKING_GARAGE  RM_DANTES_GARAGE
-#define RM_CARIB_PARKING_GARAGE    RM_DANTES_GARAGE
-#define RM_OCEAN_PARKING_GARAGE    RM_DANTES_GARAGE
-#define RM_PORTLAND_PARKING_GARAGE RM_DANTES_GARAGE
-#define RM_PAINTER_LOT             1
-#define RM_MULTNOMAH_GATE_NORTH    1
-#define RM_MULTNOMAH_GATE_SOUTH    1
+#define RM_CHARGEN_START_ROOM       60500
+#define RM_NEWBIE_LOADROOM          60565 // The Neophyte Hotel.
+#define RM_NEWBIE_LOBBY             60563
+#define RM_ENTRANCE_TO_DANTES       35500
+#define RM_DANTES_GARAGE            35693
+#define RM_DANTES_GARAGE_RANDOM     35693 + number(0,4)
+#define RM_DANTES_DESCENT           35502
+#define RM_SEATTLE_DOCWAGON         RM_ENTRANCE_TO_DANTES
+#define RM_PORTLAND_DOCWAGON        RM_ENTRANCE_TO_DANTES
+#define RM_CARIB_DOCWAGON           RM_ENTRANCE_TO_DANTES
+#define RM_OCEAN_DOCWAGON           RM_ENTRANCE_TO_DANTES
+#define RM_SEATTLE_PARKING_GARAGE   RM_DANTES_GARAGE
+#define RM_CARIB_PARKING_GARAGE     RM_DANTES_GARAGE
+#define RM_OCEAN_PARKING_GARAGE     RM_DANTES_GARAGE
+#define RM_PORTLAND_PARKING_GARAGE  RM_DANTES_GARAGE
+#define RM_PAINTER_LOT              1
+#define RM_MULTNOMAH_GATE_NORTH     1
+#define RM_MULTNOMAH_GATE_SOUTH     1
+
+#define RM_JUNKYARD_GATES           70501
+#define RM_JUNKYARD_PARTS           70502
+#define RM_JUNKYARD_GLASS           70504
+#define RM_JUNKYARD_APPLI           70505
+#define RM_JUNKYARD_ELECT           70509
+#define NUM_JUNKYARD_ROOMS          5
+
+// This is specifically not included in the above since not every vehicle can leave it successfully. BIKES AND DRONES ONLY.
+#define RM_JUNKYARD_BIKES           70508
 
 // Objects, to remove the magic numbers from the code.
 #define OBJ_NEWBIE_RADIO           60531
@@ -2057,6 +2083,7 @@ struct ban_list_element
 #define ERROR_ZONEREAD_PREMATURE_EOF           15
 #define ERROR_ZONEREAD_FORMAT_ERROR            16
 #define ERROR_MYSQL_DATABASE_NOT_FOUND         17
+#define ERROR_ARRAY_OUT_OF_BOUNDS              18
 
 // Materials.
 #define MATERIAL_PAPER        0
@@ -2077,5 +2104,17 @@ struct ban_list_element
 #define MATERIAL_CERAMIC      15
 #define MATERIAL_CONCRETE     16
 #define NUM_MATERIALS         17
+
+#define MAX_KEYRING_WEIGHT    1.0
+
+// Note: If you change this, you'll have to update zone file loading etc as well.
+#define NUM_ZONE_EDITOR_IDS   5
+
+#define LIST_COMMAND_LIMIT 500
+
+// Stack / memory canaries.
+#ifdef USE_DEBUG_CANARIES
+#define CANARY_VALUE 31337
+#endif
 
 #endif

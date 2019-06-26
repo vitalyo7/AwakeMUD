@@ -29,13 +29,13 @@
 #include "newmagic.h"
 #include "newmatrix.h"
 #include "constants.h"
+#include "newdb.h"
 
 void show_string(struct descriptor_data *d, char *input);
 void qedit_disp_menu(struct descriptor_data *d);
 
 extern MYSQL *mysql;
 extern int mysql_wrapper(MYSQL *mysql, const char *query);
-extern char *prepare_quotes(char *dest, const char *str);
 /* ************************************************************************
 *  modification of malloc'ed strings                                      *
 ************************************************************************ */
@@ -240,13 +240,13 @@ void string_add(struct descriptor_data *d, char *str)
       vehcust_menu(d); 
     } else if (STATE(d) == CON_TRIDEO) {
       (*d->str)[strlen(*d->str)-2] = '\0';
-      sprintf(buf, "INSERT INTO trideo_broadcast (author, message) VALUES (%ld, '%s')", GET_IDNUM(d->character), prepare_quotes(buf2, *d->str));
+      sprintf(buf, "INSERT INTO trideo_broadcast (author, message) VALUES (%ld, '%s')", GET_IDNUM(d->character), prepare_quotes(buf2, *d->str, sizeof(buf2) / sizeof(buf2[0])));
       mysql_wrapper(mysql, buf);
       DELETE_D_STR_IF_EXTANT(d);
       STATE(d) = CON_PLAYING;
     } else if (STATE(d) == CON_DECORATE) {
-      REPLACE_STRING(world[d->character->in_room].description);
-      write_world_to_disk(zone_table[world[d->character->in_room].zone].number);
+      REPLACE_STRING(d->character->in_room->description);
+      write_world_to_disk(zone_table[d->character->in_room->zone].number);
       STATE(d) = CON_PLAYING;
     } else if (STATE(d) == CON_SPELL_CREATE && d->edit_mode == 3) {
       REPLACE_STRING(d->edit_obj->photo);

@@ -148,7 +148,7 @@ void load_quest_targets(struct char_data *johnson, struct char_data *ch)
         (room = real_room(quest_table[num].mob[i].l_data)) > -1) {
       mob = read_mobile(rnum, REAL);
       mob->mob_specials.quest_id = GET_IDNUM(ch);
-      char_to_room(mob, room);
+      char_to_room(mob, &world[room]);
       if(quest_table[num].mob[i].objective == QMO_LOCATION)
         add_follower(mob, ch);
       for (j = 0; j < quest_table[num].num_objs; j++)
@@ -236,7 +236,7 @@ void load_quest_targets(struct char_data *johnson, struct char_data *ch)
         if ((room = real_room(quest_table[num].obj[i].l_data)) > -1) {
           obj = read_object(rnum, REAL);
           obj->obj_flags.quest_id = GET_IDNUM(ch);
-          obj_to_room(obj, room);
+          obj_to_room(obj, &world[room]);
         }
         obj = NULL;
         break;
@@ -366,7 +366,7 @@ void check_quest_delivery(struct char_data *ch, struct obj_data *obj)
   for (i = 0; i < quest_table[GET_QUEST(ch)].num_objs; i++)
     if (quest_table[GET_QUEST(ch)].obj[i].objective == QOO_LOCATION &&
         GET_OBJ_VNUM(obj) == quest_table[GET_QUEST(ch)].obj[i].vnum &&
-        world[ch->in_room].number == quest_table[GET_QUEST(ch)].obj[i].o_data)
+        ch->in_room->number == quest_table[GET_QUEST(ch)].obj[i].o_data)
     {
       ch->player_specials->obj_complete[i] = 1;
       return;
@@ -389,7 +389,7 @@ void check_quest_destination(struct char_data *ch, struct char_data *mob)
 
   for (i = 0; i < quest_table[GET_QUEST(ch)].num_mobs; i++)
     if (quest_table[GET_QUEST(ch)].mob[i].objective == QMO_LOCATION &&
-        world[mob->in_room].number == quest_table[GET_QUEST(ch)].mob[i].o_data)
+        mob->in_room->number == quest_table[GET_QUEST(ch)].mob[i].o_data)
     {
       ch->player_specials->mob_complete[i] = 1;
       stop_follower(mob);
@@ -451,7 +451,7 @@ void end_quest(struct char_data *ch)
 
 bool rep_too_high(struct char_data *ch, int num)
 {
-  if (num < 0 || num >= top_of_questt)
+  if (num < 0 || num > top_of_questt)
     return TRUE;
 
   if (GET_REP(ch) > quest_table[num].max_rep)
@@ -462,7 +462,7 @@ bool rep_too_high(struct char_data *ch, int num)
 
 bool rep_too_low(struct char_data *ch, int num)
 {
-  if (num < 0 || num >= top_of_questt)
+  if (num < 0 || num > top_of_questt)
     return TRUE;
 
   if (GET_REP(ch) < quest_table[num].min_rep)
@@ -559,7 +559,7 @@ void new_quest(struct char_data *mob)
 {
   int i, num = 0;
 
-  for (i = 0; i < top_of_questt; i++)
+  for (i = 0; i <= top_of_questt; i++)
     if (quest_table[i].johnson == GET_MOB_VNUM(mob))
       num++;
 
@@ -578,7 +578,7 @@ void new_quest(struct char_data *mob)
       GET_SPARE2(mob) = i;
       return;
     }
-    if ((i + 1) < top_of_questt)
+    if ((i + 1) <= top_of_questt)
       i++;
     else
       i = 0;
@@ -642,7 +642,7 @@ SPECIAL(johnson)
       GET_SPARE1(johnson) = -1;
     }
     if (GET_SPARE1(johnson) >= 0) {
-      for (temp = world[johnson->in_room].people; temp; temp = temp->next_in_room)
+      for (temp = johnson->in_room->people; temp; temp = temp->next_in_room)
         if (memory(johnson, temp))
           break;
       if (!temp) {
@@ -655,7 +655,7 @@ SPECIAL(johnson)
     return FALSE;
   }
 
-  if (!CAN_SEE(johnson, ch) || IS_NPC(ch) || IS_SENATOR(ch) || PRF_FLAGGED(ch, PRF_QUEST) ||
+  if (!CAN_SEE(johnson, ch) || IS_NPC(ch) || PRF_FLAGGED(ch, PRF_NOHASSLE) || PRF_FLAGGED(ch, PRF_QUEST) ||
       (AFF_FLAGGED(ch, AFF_GROUP) && ch->master))
     return FALSE;
 
@@ -783,7 +783,7 @@ void johnson_update(void)
 
   *buf = 0;
 
-  for ( i = 0; i < top_of_questt;  i++ ) {
+  for ( i = 0; i <= top_of_questt;  i++ ) {
     /* Random times */
     if ( quest_table[i].s_time == -1 ) {
       if ( dice(1, 6) )
@@ -801,7 +801,7 @@ void johnson_update(void)
         strcpy( buf, quest_table[i].s_string );
       johnson = read_mobile( quest_table[i].johnson, REAL );
       MOB_FLAGS(johnson).SetBit(MOB_ISNPC);
-      char_to_room( johnson, quest_table[i].s_room );
+      char_to_room( johnson, &world[quest_table[i].s_room] );
     }
     /* Needs to head off */
     else if ( rend || quest_table[i].e_time < time_info.hours ) {
@@ -811,13 +811,13 @@ void johnson_update(void)
         if ( johnson->nr == (tmp = read_mobile( quest_table[i].johnson, REAL))->nr )
           break;
       }
-      if ( johnson != NULL && johnson->in_room != NOWHERE ) {
+      if ( johnson != NULL && johnson->in_room) {
         MOB_FLAGS(johnson).SetBit(MOB_ISNPC);
         char_from_room( johnson );
         char_to_room( johnson, 0 );
         extract_char(johnson);
       }
-      if ( tmp != NULL && tmp->in_room != NOWHERE ) {
+      if ( tmp != NULL && tmp->in_room) {
         MOB_FLAGS(tmp).SetBit(MOB_ISNPC);
         extract_char( tmp );
       }
@@ -836,7 +836,7 @@ void assign_johnsons(void)
 {
   int i, rnum;
 
-  for (i = 0; i < top_of_questt; i++) {
+  for (i = 0; i <= top_of_questt; i++) {
     if ((rnum = real_mobile(quest_table[i].johnson)) < 0)
       log_vfprintf("Johnson #%d does not exist (quest #%d)",
           quest_table[i].johnson, quest_table[i].vnum);
@@ -900,7 +900,7 @@ void boot_one_quest(struct quest_data *quest)
 {
   int count, quest_nr = -1, i;
 
-  if ((top_of_questt + 1) >= top_of_quest_array)
+  if ((top_of_questt + 2) >= top_of_quest_array)
     // if it cannot resize, return...the edit_quest is freed later
     if (!resize_qst_array())
     {
@@ -908,7 +908,7 @@ void boot_one_quest(struct quest_data *quest)
       return;
     }
 
-  for (count = 0; count < top_of_questt; count++)
+  for (count = 0; count <= top_of_questt; count++)
     if (quest_table[count].vnum > quest->vnum)
     {
       quest_nr = count;
@@ -916,9 +916,9 @@ void boot_one_quest(struct quest_data *quest)
     }
 
   if (quest_nr == -1)
-    quest_nr = top_of_questt;
+    quest_nr = top_of_questt + 1;
   else
-    for (count = top_of_questt; count > quest_nr; count--)
+    for (count = top_of_questt + 1; count > quest_nr; count--)
     {
       // copy quest_table[count-1] to quest_table[count]
       quest_table[count] = quest_table[count-1];
@@ -1103,7 +1103,7 @@ int write_quests_to_disk(int zone)
 
   for (i = 0; i <= top_of_zone_table; ++i) {
     found = 0;
-    for (j = 0; !found && j < top_of_questt; j++)
+    for (j = 0; !found && j <= top_of_questt; j++)
       if (quest_table[j].vnum >= (zone_table[i].number * 100) &&
           quest_table[j].vnum <= zone_table[i].top) {
         found = 1;

@@ -66,6 +66,13 @@ int number(int from, int to)
     to = from;
     from = temp;
   }
+  
+  if (to > RAND_MAX) {
+    char errbuf[150];
+    sprintf(errbuf, "WARNING: Attempting to generate random number between %d and %d, but RAND_MAX is %d!", from, to, RAND_MAX);
+    mudlog(errbuf, NULL, LOG_SYSLOG, TRUE);
+  }
+  
   return ((random() % (to - from + 1)) + from);
 }
 
@@ -163,22 +170,26 @@ int convert_damage(int damage)
   return damage;
 }
 
-int light_level(rnum_t room)
+int light_level(struct room_data *room)
 {
-  if (world[room].sector_type == SPIRIT_HEARTH)
-    return world[room].vision[0];
-  if (world[room].sector_type == SPIRIT_CITY) {
+  if (!room) {
+    mudlog("SYSERR: light_level() called on null room.", NULL, LOG_SYSLOG, TRUE);
+    return LIGHT_NORMAL;
+  }
+  if (room->sector_type == SPIRIT_HEARTH)
+    return room->vision[0];
+  if (room->sector_type == SPIRIT_CITY) {
     if ((time_info.hours > 6 && time_info.hours < 19))
-      return world[room].vision[0];
-    else if (world[room].vision[0] == LIGHT_NORMALNOLIT)
+      return room->vision[0];
+    else if (room->vision[0] == LIGHT_NORMALNOLIT)
       return LIGHT_MINLIGHT;
     else
       return LIGHT_PARTLIGHT;
   }
-  if ((time_info.hours < 6 && time_info.hours > 19) && (world[room].vision[0] > LIGHT_MINLIGHT || world[room].vision[0] <= LIGHT_NORMALNOLIT))
+  if ((time_info.hours < 6 && time_info.hours > 19) && (room->vision[0] > LIGHT_MINLIGHT || room->vision[0] <= LIGHT_NORMALNOLIT))
     return LIGHT_MINLIGHT;
   else
-    return world[room].vision[0];
+    return room->vision[0];
 }
 
 int damage_modifier(struct char_data *ch, char *rbuf)
@@ -263,12 +274,14 @@ int modify_target_rbuf_raw(struct char_data *ch, char *rbuf, int current_visibil
     buf_mod( rbuf, "Sustain", (GET_SUSTAINED_NUM(ch) - GET_SUSTAINED_FOCI(ch)) * 2);
   }
   
+  struct room_data *temp_room = get_ch_in_room(ch);
+  
   if (PLR_FLAGGED(ch, PLR_PERCEIVE))
   {
     base_target += 2;
     buf_mod(rbuf, "AstralPercep", 2);
   } else if (current_visibility_penalty < 8) {
-    switch (light_level(ch->in_room)) {
+    switch (light_level(temp_room)) {
       case LIGHT_FULLDARK:
         if (CURRENT_VISION(ch) == THERMOGRAPHIC) {
           if (NATURAL_VISION(ch) == THERMOGRAPHIC) {
@@ -331,26 +344,26 @@ int modify_target_rbuf_raw(struct char_data *ch, char *rbuf, int current_visibil
         }
         break;
     }
-    if (light_target > 0 && world[ch->in_room].light[1]) {
-      if (world[ch->in_room].light[2]) {
-        light_target = MAX(0, light_target - world[ch->in_room].light[2]);
-        buf_mod(rbuf, "LightSpell", - world[ch->in_room].light[2]);
+    if (light_target > 0 && temp_room->light[1]) {
+      if (temp_room->light[2]) {
+        light_target = MAX(0, light_target - temp_room->light[2]);
+        buf_mod(rbuf, "LightSpell", - temp_room->light[2]);
       } else
         light_target /= 2;
     }
-    if (world[ch->in_room].shadow[0]) {
-      light_target += world[ch->in_room].shadow[1];
-      buf_mod(rbuf, "ShadowSpell", world[ch->in_room].shadow[1]);
+    if (temp_room->shadow[0]) {
+      light_target += temp_room->shadow[1];
+      buf_mod(rbuf, "ShadowSpell", temp_room->shadow[1]);
     }
     int smoke_target = 0;
     
-    if (world[ch->in_room].vision[1] == LIGHT_MIST)
+    if (temp_room->vision[1] == LIGHT_MIST)
       if (CURRENT_VISION(ch) == NORMAL || (CURRENT_VISION(ch) == LOWLIGHT && NATURAL_VISION(ch) == LOWLIGHT)) {
         smoke_target += 2;
         buf_mod(rbuf, "Mist", 2);
       }
-    if (world[ch->in_room].vision[1] == LIGHT_LIGHTSMOKE || (weather_info.sky == SKY_RAINING &&
-                                                             world[ch->in_room].sector_type != SPIRIT_HEARTH && !ROOM_FLAGGED(ch->in_room, ROOM_INDOORS))) {
+    if (temp_room->vision[1] == LIGHT_LIGHTSMOKE || (weather_info.sky == SKY_RAINING &&
+                                                             temp_room->sector_type != SPIRIT_HEARTH && !ROOM_FLAGGED(temp_room, ROOM_INDOORS))) {
       if (CURRENT_VISION(ch) == NORMAL || (CURRENT_VISION(ch) == LOWLIGHT && NATURAL_VISION(ch) != LOWLIGHT)) {
         smoke_target += 4;
         buf_mod(rbuf, "LSmoke", 4);
@@ -359,8 +372,8 @@ int modify_target_rbuf_raw(struct char_data *ch, char *rbuf, int current_visibil
         buf_mod(rbuf, "LSmoke", 2);
       }
     }
-    if (world[ch->in_room].vision[1] == LIGHT_HEAVYSMOKE || (weather_info.sky == SKY_LIGHTNING &&
-                                                             world[ch->in_room].sector_type != SPIRIT_HEARTH && !ROOM_FLAGGED(ch->in_room, ROOM_INDOORS))) {
+    if (temp_room->vision[1] == LIGHT_HEAVYSMOKE || (weather_info.sky == SKY_LIGHTNING &&
+                                                             temp_room->sector_type != SPIRIT_HEARTH && !ROOM_FLAGGED(temp_room, ROOM_INDOORS))) {
       if (CURRENT_VISION(ch) == NORMAL || (CURRENT_VISION(ch) == LOWLIGHT && NATURAL_VISION(ch) == NORMAL)) {
         smoke_target += 6;
         buf_mod(rbuf, "HSmoke", 6);
@@ -372,7 +385,7 @@ int modify_target_rbuf_raw(struct char_data *ch, char *rbuf, int current_visibil
         buf_mod(rbuf, "HSmoke", 1);
       }
     }
-    if (world[ch->in_room].vision[1] == LIGHT_THERMALSMOKE) {
+    if (temp_room->vision[1] == LIGHT_THERMALSMOKE) {
       if (CURRENT_VISION(ch) == NORMAL || CURRENT_VISION(ch) == LOWLIGHT) {
         smoke_target += 4;
         buf_mod(rbuf, "TSmoke", 4);
@@ -400,7 +413,7 @@ int modify_target_rbuf_raw(struct char_data *ch, char *rbuf, int current_visibil
     base_target += 1;
     buf_mod( rbuf, "Sunlight", 1);
   }
-  if (world[ch->in_room].poltergeist[0] && !IS_ASTRAL(ch) && !IS_DUAL(ch))
+  if (temp_room->poltergeist[0] && !IS_ASTRAL(ch) && !IS_DUAL(ch))
   {
     base_target += 2;
     buf_mod(rbuf, "Polter", 2);
@@ -429,8 +442,8 @@ int modify_target_rbuf_raw(struct char_data *ch, char *rbuf, int current_visibil
         base_target += GET_LEVEL(sust->target);
         buf_mod(rbuf, "SConfused", GET_LEVEL(sust->target));
       }
-  if (ch->in_room != NOWHERE && ROOM_FLAGGED(ch->in_room, ROOM_INDOORS)) {
-    float heightdif = GET_HEIGHT(ch) / ((world[ch->in_room].z != 0 ? world[ch->in_room].z : 1)*100);
+  if (temp_room && ROOM_FLAGGED(temp_room, ROOM_INDOORS)) {
+    float heightdif = GET_HEIGHT(ch) / ((temp_room->z != 0 ? temp_room->z : 1)*100);
     if (heightdif > 1) {
       base_target += 2;
       buf_mod(rbuf, "TooTallRatio", (int)(heightdif*100));
@@ -669,7 +682,7 @@ void log_death_trap(struct char_data * ch)
   extern struct room_data *world;
   
   sprintf(buf, "%s hit DeathTrap #%ld (%s)", GET_CHAR_NAME(ch),
-          world[ch->in_room].number, world[ch->in_room].name);
+          ch->in_room->number, ch->in_room->name);
   mudlog(buf, ch, LOG_DEATHLOG, TRUE);
 }
 
@@ -718,10 +731,10 @@ void mudlog(const char *str, struct char_data *ch, int log, bool file)
   
   if ( ch && ch->desc && ch->desc->original )
     sprintf(buf2, "[%5ld] (%s) ",
-            world[ch->in_room].number,
+            get_ch_in_room(ch)->number,
             GET_CHAR_NAME(ch));
-  else if (ch && ch->in_room != NOWHERE)
-    sprintf(buf2, "[%5ld] ", world[ch->in_room].number);
+  else if (ch && ch->in_room)
+    sprintf(buf2, "[%5ld] ", ch->in_room->number);
   else
     strcpy(buf2, "");
   
@@ -1043,7 +1056,7 @@ char * buf_roll(char *rbuf, const char *name, int bonus)
 int get_speed(struct veh_data *veh)
 {
   int speed = 0, maxspeed = (int)(veh->speed * ((veh->load - veh->usedload) / (veh->load != 0 ? veh->load : 1)));
-  
+  struct room_data *in_room = get_veh_in_room(veh);
   switch (veh->cspeed)
   {
     case SPEED_OFF:
@@ -1051,19 +1064,19 @@ int get_speed(struct veh_data *veh)
       speed = 0;
       break;
     case SPEED_CRUISING:
-      if (ROOM_FLAGGED(veh->in_room, ROOM_INDOORS))
+      if (ROOM_FLAGGED(in_room, ROOM_INDOORS))
         speed = MIN(maxspeed, 3);
       else
         speed = MIN(maxspeed, 55);
       break;
     case SPEED_SPEEDING:
-      if (ROOM_FLAGGED(veh->in_room, ROOM_INDOORS))
+      if (ROOM_FLAGGED(in_room, ROOM_INDOORS))
         speed = MIN(maxspeed, MAX(5, (int)(maxspeed * .7)));
       else
         speed = MIN(maxspeed, MAX(55, (int)(maxspeed * .7)));
       break;
     case SPEED_MAX:
-      if (ROOM_FLAGGED(veh->in_room, ROOM_INDOORS))
+      if (ROOM_FLAGGED(in_room, ROOM_INDOORS))
         speed = MIN(maxspeed, 8);
       else
         speed = maxspeed;
@@ -1170,6 +1183,14 @@ int get_skill(struct char_data *ch, int skill, int &target)
     target = 2;
   
   // TODO: Adept power Improved Ability. This ability is not currently in the game, but would be factored in here. See Core p169 for details.
+  
+  // Convert NPCs so that they can use Armed Combat in place of any weapon skill except unarmed combat.
+  if (IS_NPC(ch) && ((skill >= SKILL_ARMED_COMBAT && skill <= SKILL_CLUBS)
+                     || (skill >= SKILL_CYBER_IMPLANTS && skill <= SKILL_ORALSTRIKE)
+                     || (skill == SKILL_THROWING_WEAPONS))) {
+    if (GET_SKILL(ch, skill) < GET_SKILL(ch, SKILL_ARMED_COMBAT))
+      skill = SKILL_ARMED_COMBAT;
+  }
   
   if (GET_SKILL(ch, skill))
   {
@@ -1564,21 +1585,22 @@ bool has_kit(struct char_data * ch, int type)
 // Returns a pointer to the best workshop/facility of the requested type.
 struct obj_data *find_workshop(struct char_data * ch, int type)
 {
-  if (!ch->in_veh && ch->in_room < 0)
+  struct obj_data *workshop = NULL;
+  
+  if (!ch->in_veh && !ch->in_room)
     return NULL;
   
   // If they're in a valid room, return the room's workshop field for MAXIMUM EFFICIENCY.
-  if (ch->in_room != NOWHERE)
-    return world[ch->in_room].best_workshop[type];
+  if (ch->in_room)
+    return ch->in_room->best_workshop[type];
   
   // If we've gotten here, they must be in a vehicle. Iterate through and find the best candidate.
-  struct obj_data *workshop = NULL;
   for (struct obj_data *o = ch->in_veh->contents; o; o = o->next_content) {
-    if (GET_OBJ_TYPE(o) == ITEM_WORKSHOP && GET_OBJ_VAL(o, 0) == type) {
-      if (GET_OBJ_VAL(o, 1) == TYPE_FACILITY) {
+    if (GET_OBJ_TYPE(o) == ITEM_WORKSHOP && GET_WORKSHOP_TYPE(o) == type) {
+      if (GET_WORKSHOP_GRADE(o) == TYPE_FACILITY) {
         // Jackpot! Facilities are the best option, so we can terminate early and return this item.
         return o;
-      } else if (GET_OBJ_VAL(o, 1) == TYPE_SHOP && GET_OBJ_VAL(o, 2))
+      } else if (GET_WORKSHOP_GRADE(o) == TYPE_SHOP && GET_WORKSHOP_IS_SETUP(o))
         workshop = o;
     }
   }
@@ -1599,15 +1621,15 @@ bool _is_workshop_valid(struct obj_data *obj) {
   
   // Don't allow it to crash the MUD via out-of-bounds world table access.
   if (!obj->in_room) {
-    sprintf(buf, "SYSERR: Workshop '%s' (%ld) claims it's at world index %ld, which doesn't appear to be valid.",
-            GET_OBJ_NAME(obj), GET_OBJ_VNUM(obj), obj->in_room);
+    sprintf(buf, "SYSERR: Workshop '%s' (%ld) has NULL room.",
+            GET_OBJ_NAME(obj), GET_OBJ_VNUM(obj));
     mudlog(buf, NULL, LOG_SYSLOG, TRUE);
     return FALSE;
   }
   
   // Precondition: The item must be a deployed workshop or a facility.
-  if (!(GET_OBJ_VAL(obj, 1) == TYPE_SHOP && GET_OBJ_VAL(obj, 2)) && GET_OBJ_VAL(obj, 1) != TYPE_FACILITY) {
-    // For this to be true, the item is a kit. We're not going to throw an error over that.
+  if (!(GET_WORKSHOP_GRADE(obj) == TYPE_SHOP && GET_WORKSHOP_IS_SETUP(obj)) && GET_WORKSHOP_GRADE(obj) != TYPE_FACILITY) {
+    // For this to be true, the item is a kit. We're not going to throw an error over that, but it's not a valid workshop.
     return FALSE;
   }
   
@@ -1618,41 +1640,47 @@ void add_workshop_to_room(struct obj_data *obj) {
   if (!_is_workshop_valid(obj))
     return;
   
-  struct obj_data *current = world[obj->in_room].best_workshop[GET_OBJ_VAL(obj, 0)];
-  
-  if (current && GET_OBJ_VAL(current, 1) > GET_OBJ_VAL(obj, 1))
+  if (!obj->in_room)
     return;
   
-  world[obj->in_room].best_workshop[GET_OBJ_VAL(obj, 0)] = obj;
+  struct obj_data *current = obj->in_room->best_workshop[GET_OBJ_VAL(obj, 0)];
+  
+  if (current && GET_WORKSHOP_GRADE(current) > GET_WORKSHOP_GRADE(obj))
+    return;
+  
+  obj->in_room->best_workshop[GET_WORKSHOP_TYPE(obj)] = obj;
 }
 
 void remove_workshop_from_room(struct obj_data *obj) {
   if (!_is_workshop_valid(obj))
     return;
   
+  if (!obj->in_room)
+    return;
+  
   // If this wasn't the best workshop in the first place, who cares?
-  if (world[obj->in_room].best_workshop[GET_OBJ_VAL(obj, 0)] != obj)
+  if (obj->in_room->best_workshop[GET_WORKSHOP_TYPE(obj)] != obj)
     return;
   
   // Clear out our current best_workshop pointer (previously pointed to obj).
-  world[obj->in_room].best_workshop[GET_OBJ_VAL(obj, 0)] = NULL;
+  obj->in_room->best_workshop[GET_WORKSHOP_TYPE(obj)] = NULL;
   
   // Iterate through all items in the room, looking for other valid workshops/facilities of this type.
-  for (struct obj_data *o = world[obj->in_room].contents; o; o = o->next_content) {
-    if (o != obj && GET_OBJ_TYPE(o) == ITEM_WORKSHOP && GET_OBJ_VAL(o, 0) == GET_OBJ_VAL(obj, 0)) {
-      switch (GET_OBJ_VAL(o, 1)) {
+  for (struct obj_data *o = obj->in_room->contents; o; o = o->next_content) {
+    if (o != obj && GET_OBJ_TYPE(o) == ITEM_WORKSHOP && GET_WORKSHOP_TYPE(o) == GET_WORKSHOP_TYPE(obj)) {
+      switch (GET_WORKSHOP_GRADE(o)) {
         case TYPE_FACILITY:
           // This is the best possible outcome; set room val to this and return.
-          world[obj->in_room].best_workshop[GET_OBJ_VAL(o, 0)] = o;
+          obj->in_room->best_workshop[GET_WORKSHOP_TYPE(obj)] = o;
           return;
         case TYPE_SHOP:
           // The value of best_workshop is either a workshop or null, so no harm in setting it to another workshop.
-          world[obj->in_room].best_workshop[GET_OBJ_VAL(o, 0)] = o;
+          obj->in_room->best_workshop[GET_WORKSHOP_TYPE(obj)] = o;
           break;
         case TYPE_KIT:
           break;
         default:
-          sprintf(buf, "SYSERR: Invalid workshop type %d found for object %s (%ld).", GET_OBJ_VAL(o, 1), GET_OBJ_NAME(obj), GET_OBJ_VNUM(obj));
+          sprintf(buf, "SYSERR: Invalid workshop type %d found for object %s (%ld).", GET_WORKSHOP_GRADE(o), GET_OBJ_NAME(o), GET_OBJ_VNUM(o));
           mudlog(buf, NULL, LOG_SYSLOG, TRUE);
           break;
       }
@@ -1806,4 +1834,130 @@ void delete_message_history(struct descriptor_data *d) {
       d->message_history[channel].RemoveItem(temp);
     }
   }
+}
+
+// Call this to kill the game while notifying staff etc of what happened.
+void terminate_mud_process_with_message(const char *message, int error_code) {
+  sprintf(buf, "FATAL ERROR: The MUD has encountered a terminal error (code %d) and will now halt. The message given was as follows: %s",
+          error_code, message);
+  mudlog(buf, NULL, LOG_SYSLOG, TRUE);
+  log(buf);
+  exit(error_code);
+}
+
+struct room_data *get_veh_in_room(struct veh_data *veh) {
+  char errbuf[500];
+  if (!veh) {
+    sprintf(errbuf, "SYSERR: get_veh_in_room was passed a NULL vehicle!");
+    mudlog(errbuf, NULL, LOG_SYSLOG, TRUE);
+    return NULL;
+  }
+  
+  while (veh->in_veh)
+    veh = veh->in_veh;
+  
+  // Error messaging.
+  if (!veh->in_room) {
+    sprintf(errbuf, "SYSERR: get_veh_in_room called on veh %s, but it's not in a room or vehicle!", GET_VEH_NAME(veh));
+    mudlog(errbuf, NULL, LOG_SYSLOG, TRUE);
+  }
+  
+  return veh->in_room;
+}
+
+struct room_data *get_ch_in_room(struct char_data *ch) {
+  char errbuf[500];
+  if (!ch) {
+    sprintf(errbuf, "SYSERR: get_ch_in_room was passed a NULL character!");
+    mudlog(errbuf, ch, LOG_SYSLOG, TRUE);
+    return NULL;
+  }
+  
+  if (ch->in_room)
+    return ch->in_room;
+  
+  if (ch->in_veh) {
+    return get_veh_in_room(ch->in_veh);
+  }
+  
+  sprintf(errbuf, "SYSERR: get_ch_in_room called on char %s, but they're not in a room or vehicle!", GET_NAME(ch));
+  mudlog(errbuf, ch, LOG_SYSLOG, TRUE);
+  
+  return NULL;
+}
+
+struct room_data *get_obj_in_room(struct obj_data *obj) {
+  char errbuf[500];
+  if (!obj) {
+    sprintf(errbuf, "SYSERR: get_obj_in_room was passed a NULL object!");
+    mudlog(errbuf, NULL, LOG_SYSLOG, TRUE);
+    return NULL;
+  }
+  
+  if (obj->in_room)
+    return obj->in_room;
+  
+  if (obj->in_veh)
+    return get_veh_in_room(obj->in_veh);
+  
+  // Below this line is frantic flailing to avoid passing back NULL (which tends to crash the game).
+  if (obj->in_obj)
+    return get_obj_in_room(obj->in_obj);
+  
+  if (obj->carried_by)
+    return get_ch_in_room(obj->carried_by);
+  
+  if (obj->worn_by)
+    return get_ch_in_room(obj->carried_by);
+  
+  // All is lost. The object floats in an endless void.
+  sprintf(errbuf, "SYSERR: get_obj_in_room called on obj %s, but it's not in a room or vehicle!", GET_OBJ_NAME(obj));
+  mudlog(errbuf, NULL, LOG_SYSLOG, TRUE);
+  
+  return NULL;
+}
+
+bool invis_ok(struct char_data *ch, struct char_data *vict) {
+  // Staff member or astrally aware? You can see everything.
+  if (IS_SENATOR(ch) || IS_ASTRAL(ch) || IS_DUAL(ch))
+    return TRUE;
+  
+  // Ultrasound pierces all invis as long as it's not blocked by silence or stealth.
+  if (AFF_FLAGGED(ch, AFF_DETECT_INVIS) && (get_ch_in_room(ch)->silence[0] <= 0 && !affected_by_spell(vict, SPELL_STEALTH)))
+    return TRUE;
+  
+  // Improved invis defeats all other detection measures.
+  if (IS_AFFECTED(vict, AFF_IMP_INVIS) || IS_AFFECTED(vict, AFF_SPELLIMPINVIS))
+    return FALSE;
+  
+  // Standard invis is pierced by thermographic vision, which is default on vehicles.
+  if (IS_AFFECTED(vict, AFF_INVISIBLE)) {
+    return CURRENT_VISION(ch) == THERMOGRAPHIC || AFF_FLAGGED(ch, AFF_RIG) || PLR_FLAGGED(ch, PLR_REMOTE);
+  }
+  
+  // If we've gotten here, they're not invisible.
+  return TRUE;
+}
+
+// Returns TRUE if the character is able to make noise, FALSE otherwise.
+bool char_can_make_noise(struct char_data *ch, const char *message) {
+  if (affected_by_spell(ch, SPELL_STEALTH) || get_ch_in_room(ch)->silence[0]) {
+    // Can't make noise.
+    if (message)
+      send_to_char(message, ch);
+    
+    return FALSE;
+  }
+  
+  return TRUE;
+}
+
+struct char_data *get_driver(struct veh_data *veh) {
+  struct char_data *i;
+    
+  for (i = veh->people; i; i = i->next_in_veh)
+    if (AFF_FLAGGED(i, AFF_PILOT))
+      return i;
+  
+  return NULL;
 }

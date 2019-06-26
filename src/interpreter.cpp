@@ -1256,12 +1256,14 @@ const char *reserved[] =
   {
     "self",
     "me",
+    "myself",
     "all",
     "room",
     "someone",
     "something",
     "new",
     "guest",
+    "deleted",
     "\n"
   };
 
@@ -1892,10 +1894,10 @@ int special(struct char_data * ch, int cmd, char *arg)
   struct veh_data *veh;
   RIG_VEH(ch, veh);
   if (veh && GET_ROOM_SPEC(veh->in_room) != NULL)
-      if (GET_ROOM_SPEC(veh->in_room) (ch, world + veh->in_room, cmd, arg))
+      if (GET_ROOM_SPEC(veh->in_room) (ch, &world[real_room(veh->in_room->number)], cmd, arg))
         return 1;
   if (GET_ROOM_SPEC(ch->in_room) != NULL)
-    if (GET_ROOM_SPEC(ch->in_room) (ch, world + ch->in_room, cmd, arg))
+    if (GET_ROOM_SPEC(ch->in_room) (ch, &world[real_room(ch->in_room->number)], cmd, arg))
       return 1;
 
   /* special in equipment list? */
@@ -1912,7 +1914,7 @@ int special(struct char_data * ch, int cmd, char *arg)
         return 1;
 
   /* special in object present? */
-  for (i = ch->in_veh ? ch->in_veh->contents : world[ch->in_room].contents; i; i = i->next_content)
+  for (i = ch->in_veh ? ch->in_veh->contents : ch->in_room->contents; i; i = i->next_content)
     if (GET_OBJ_SPEC(i) != NULL && !(ch->in_veh && ch->vfront != i->vfront))
       if (GET_OBJ_SPEC(i) (ch, i, cmd, arg))
         return 1;
@@ -1920,7 +1922,7 @@ int special(struct char_data * ch, int cmd, char *arg)
   if (!veh)
   {
     struct char_data *k;
-    for (k = world[ch->in_room].people; k; k = k->next_in_room) {
+    for (k = ch->in_room->people; k; k = k->next_in_room) {
       if (GET_MOB_SPEC(k) != NULL)
         if (GET_MOB_SPEC(k) (ch, k, cmd, arg))
           return 1;
@@ -2036,9 +2038,9 @@ int perform_dupe_check(struct descriptor_data *d)
     }
 
     /* we've found a duplicate - blow him away, dumping his eq in limbo. */
-    if (ch->in_room != NOWHERE)
+    if (ch->in_room)
       char_from_room(ch);
-    char_to_room(ch, 1);
+    char_to_room(ch, &world[1]);
     extract_char(ch);
   }
 
@@ -2084,7 +2086,7 @@ int perform_dupe_check(struct descriptor_data *d)
       d->character->persona = NULL;
       PLR_FLAGS(d->character).RemoveBit(PLR_MATRIX);
     } else if (PLR_FLAGGED(d->character, PLR_MATRIX)) {
-      for (struct char_data *temp = world[d->character->in_room].people; temp; temp = temp->next_in_room)
+      for (struct char_data *temp = d->character->in_room->people; temp; temp = temp->next_in_room)
         if (PLR_FLAGGED(temp, PLR_MATRIX))
           temp->persona->decker->hitcher = NULL;
       PLR_FLAGS(d->character).RemoveBit(PLR_MATRIX);
@@ -2340,7 +2342,7 @@ void nanny(struct descriptor_data * d, char *arg)
                 GET_CHAR_NAME(d->character), d->host);
         mudlog(buf, d->character, LOG_CONNLOG, TRUE);
         GET_BAD_PWS(d->character)++;
-        d->character->in_room = real_room(GET_LAST_IN(d->character));
+        d->character->in_room = &world[real_room(GET_LAST_IN(d->character))];
         playerDB.SaveChar(d->character, GET_LOADROOM(d->character));
         if (++(d->bad_pws) >= max_bad_pws) {    /* 3 strikes and you're out. */
           SEND_TO_Q("Wrong password... disconnecting.\r\n", d);
@@ -2357,7 +2359,8 @@ void nanny(struct descriptor_data * d, char *arg)
 #ifdef NOCRYPT
       char prepare_quotes_buf[2048];
       sprintf(query_buf, "UPDATE pfiles SET password='%s' WHERE idnum=%ld;",
-              prepare_quotes(prepare_quotes_buf, GET_PASSWD(d->character)), GET_IDNUM(d->character));
+              prepare_quotes(prepare_quotes_buf, GET_PASSWD(d->character), sizeof(prepare_quotes_buf) / sizeof(prepare_quotes_buf[0])),
+              GET_IDNUM(d->character));
 #else
       sprintf(query_buf, "UPDATE pfiles SET password='%s' WHERE idnum=%ld;", GET_PASSWD(d->character), GET_IDNUM(d->character));
 #endif
@@ -2366,7 +2369,7 @@ void nanny(struct descriptor_data * d, char *arg)
       load_result = GET_BAD_PWS(d->character);
       GET_BAD_PWS(d->character) = 0;
 
-      d->character->in_room = real_room(GET_LAST_IN(d->character));
+      d->character->in_room = &world[real_room(GET_LAST_IN(d->character))];
       playerDB.SaveChar(d->character, GET_LOADROOM(d->character));
       if (isbanned(d->host) == BAN_SELECT &&
           !PLR_FLAGGED(d->character, PLR_SITEOK)) {
@@ -2480,7 +2483,8 @@ void nanny(struct descriptor_data * d, char *arg)
 #ifdef NOCRYPT
         char prepare_quotes_buf[2048];
         sprintf(query_buf, "UPDATE pfiles SET password='%s' WHERE idnum=%ld;",
-                prepare_quotes(prepare_quotes_buf, GET_PASSWD(d->character)), GET_IDNUM(d->character));
+                prepare_quotes(prepare_quotes_buf, GET_PASSWD(d->character), sizeof(prepare_quotes_buf) / sizeof(prepare_quotes_buf[0])),
+                GET_IDNUM(d->character));
 #else
         sprintf(query_buf, "UPDATE pfiles SET password='%s' WHERE idnum=%ld;", GET_PASSWD(d->character), GET_IDNUM(d->character));
 #endif
@@ -2555,7 +2559,7 @@ void nanny(struct descriptor_data * d, char *arg)
         GET_LOADROOM(d->character) = RM_ENTRANCE_TO_DANTES;
       }
       
-      if (ROOM_FLAGGED(load_room, ROOM_HOUSE) && !House_can_enter(d->character, world[load_room].number))
+      if (ROOM_FLAGGED(&world[load_room], ROOM_HOUSE) && !House_can_enter(d->character, world[load_room].number))
         load_room = real_room(mortal_start_room);
       /* If char was saved with NOWHERE, or real_room above failed... */
       if (PLR_FLAGGED(d->character, PLR_AUTH))
@@ -2589,7 +2593,7 @@ void nanny(struct descriptor_data * d, char *arg)
           }
       }
       if (!d->character->in_veh)
-        char_to_room(d->character, load_room);
+        char_to_room(d->character, &world[load_room]);
       act("$n has entered the game.", TRUE, d->character, 0, 0, TO_ROOM);
       sprintf(buf, "%s has entered the game.", GET_CHAR_NAME(d->character));
       mudlog(buf, d->character, LOG_CONNLOG, TRUE);

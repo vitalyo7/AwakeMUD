@@ -700,6 +700,7 @@ void assign_rooms(void)
   SPECIAL(chargen_south_from_trainer);
   SPECIAL(chargen_skill_annex);
   SPECIAL(chargen_unpractice_skill);
+  SPECIAL(floor_has_glass_shards);
 
   /* Limbo/God Rooms */
   ASSIGNROOM(8, oceansounds);
@@ -766,9 +767,12 @@ void assign_rooms(void)
 
 /*ASSIGNROOM(17598, multnomah_gate);
   ASSIGNROOM(17599, multnomah_gate); */
+  
+  // Junkyard
+  ASSIGNROOM(70504, floor_has_glass_shards);
 
  
-  for (long x = 0; x < top_of_world; x++)
-    if (ROOM_FLAGGED(x, ROOM_ROAD) && !ROOM_FLAGGED(x, ROOM_NO_TRAFFIC) && !ROOM_FLAGGED(x, ROOM_GARAGE) && !world[x].func && SECT(x) == SPIRIT_CITY)
+  for (long x = 0; x <= top_of_world; x++)
+    if (ROOM_FLAGGED(&world[x], ROOM_ROAD) && !ROOM_FLAGGED(&world[x], ROOM_NO_TRAFFIC) && !ROOM_FLAGGED(&world[x], ROOM_GARAGE) && !world[x].func && SECT(&world[x]) == SPIRIT_CITY)
       ASSIGNROOM(world[x].number, traffic);
 }

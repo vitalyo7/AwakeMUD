@@ -120,6 +120,23 @@ void redit_disp_extradesc_menu(struct descriptor_data * d)
   d->edit_mode = REDIT_EXTRADESC_MENU;
 }
 
+const char *render_door_type_string(struct room_direction_data *door) {
+  if (!IS_SET(door->exit_info, EX_ISDOOR))
+    return "No door";
+  
+  if (IS_SET(door->exit_info, EX_PICKPROOF)) {
+    if (IS_SET(door->exit_info, EX_ASTRALLY_WARDED))
+      return "Pickproof, astrally-warded door";
+    else
+      return "Pickproof";
+  } else {
+    if (IS_SET(door->exit_info, EX_ASTRALLY_WARDED))
+      return "Astrally-warded regular door";
+    else
+      return "Regular door";
+  }
+}
+
 /* For exits */
 void redit_disp_exit_menu(struct descriptor_data * d)
 {
@@ -144,9 +161,9 @@ void redit_disp_exit_menu(struct descriptor_data * d)
                "5) Door flag: %s%s%s\r\n",
                CCCYN(CH, C_CMP), (DOOR->keyword ? DOOR->keyword : "(none)"),
                CCNRM(CH, C_CMP), CCCYN(CH, C_CMP), DOOR->key, CCNRM(CH, C_CMP),
-               CCCYN(CH, C_CMP), (IS_SET(DOOR->exit_info, EX_ISDOOR) ?
-                                  (IS_SET(DOOR->exit_info, EX_PICKPROOF) ? "Pickproof" : "Regular door") :
-                                      "No door"), CCNRM(CH, C_CMP));
+               CCCYN(CH, C_CMP), render_door_type_string(DOOR), CCNRM(CH, C_CMP));
+  
+  
 
   send_to_char(CH,        "6) Lock level: %s%d%s\r\n"
                "7) Material Type: %s%s%s\r\n"
@@ -169,6 +186,8 @@ void redit_disp_exit_flag_menu(struct descriptor_data * d)
   send_to_char( "0) No door\r\n"
                 "1) Closeable door\r\n"
                 "2) Pickproof\r\n"
+                "3) Astrally-warded closeable door\r\n"
+                "4) Astrally-warded pickproof door\r\n"
                 "Enter choice:", CH);
 }
 
@@ -350,8 +369,8 @@ void redit_parse(struct descriptor_data * d, const char *arg)
         Mem->DeleteRoom(d->edit_room);
       d->edit_room = NULL;
       PLR_FLAGS(d->character).RemoveBit(PLR_EDITING);
-      char_to_room(CH, GET_WAS_IN(CH));
-      GET_WAS_IN(CH) = NOWHERE;
+        char_to_room(CH, GET_WAS_IN(CH));
+        GET_WAS_IN(CH) = NULL;
       break;
     default:
       send_to_char("That's not a valid choice!\r\n", d->character);
@@ -415,13 +434,13 @@ void redit_parse(struct descriptor_data * d, const char *arg)
               PLR_FLAGS(d->character).RemoveBit(PLR_EDITING);
               STATE(d) = CON_PLAYING;
               char_to_room(CH, GET_WAS_IN(CH));
-              GET_WAS_IN(CH) = NOWHERE;
+              GET_WAS_IN(CH) = NULL;
               return;
             }
 
 
           /* count thru world tables */
-          for (counter = 0; counter < top_of_world + 1; counter++) {
+          for (counter = 0; counter <= top_of_world; counter++) {
             if (!found) {
               /* check if current virtual is bigger than our virtual */
               if (world[counter].number > d->edit_number) {
@@ -444,21 +463,21 @@ void redit_parse(struct descriptor_data * d, const char *arg)
               struct veh_data *temp_veh;
               for (temp_ch = world[counter].people; temp_ch;
                    temp_ch = temp_ch->next_in_room)  {
-                if (temp_ch->in_room != NOWHERE)
-                  temp_ch->in_room++;
+                if (temp_ch->in_room)
+                  temp_ch->in_room = &world[real_room(temp_ch->in_room->number) + 1];
               }
 
               for (temp_veh = world[counter].vehicles; temp_veh;
                    temp_veh = temp_veh->next_veh)  {
-                if (temp_veh->in_room != NOWHERE)
-                  temp_veh->in_room++;
+                if (temp_veh->in_room)
+                  temp_veh->in_room = &world[real_room(temp_veh->in_room->number) + 1];
               }
 
               /* move objects */
               for (temp_obj = world[counter].contents; temp_obj;
                    temp_obj = temp_obj->next_content)
-                if (temp_obj->in_room != -1)
-                  temp_obj->in_room++;
+                if (temp_obj->in_room)
+                  temp_obj->in_room = &world[real_room(temp_obj->in_room->number) + 1];
             } // end else
           } // end 'insert' for-loop
 
@@ -475,8 +494,8 @@ void redit_parse(struct descriptor_data * d, const char *arg)
           /* now zoom through the character list and update anyone in limbo */
           struct char_data * temp_ch;
           for (temp_ch = character_list; temp_ch; temp_ch = temp_ch->next) {
-            if (GET_WAS_IN(temp_ch) >= room_num)
-              GET_WAS_IN(temp_ch)++;
+            if (GET_WAS_IN(temp_ch) && real_room(GET_WAS_IN(temp_ch)->number) >= room_num)
+              GET_WAS_IN(temp_ch) = &world[real_room(GET_WAS_IN(temp_ch)->number) + 1];
           }
           /* update zone tables */
           {
@@ -521,37 +540,38 @@ void redit_parse(struct descriptor_data * d, const char *arg)
             r_newbie_start_room++;
           /* go through the world. if any of the old rooms indicated an exit
            * to our new room, we have to change it */
-          for (counter = 0; counter < top_of_world + 1; counter++) {
+          for (counter = 0; counter <= top_of_world; counter++) {
             for (counter2 = 0; counter2 < NUM_OF_DIRS; counter2++) {
               /* if exit exists */
-              if (world[counter].dir_option[counter2]) {
+              if (world[counter].dir_option[counter2] && world[counter].dir_option[counter2]->to_room) {
                 /* increment r_nums for rooms bigger than or equal to new one
                  * because we inserted room */
-                if (world[counter].dir_option[counter2]->to_room >= room_num)
-                  world[counter].dir_option[counter2]->to_room += 1;
+                vnum_t rnum = real_room(world[counter].dir_option[counter2]->to_room->number);
+                if (rnum >= room_num)
+                  world[counter].dir_option[counter2]->to_room = &world[rnum + 1];
                 /* if an exit to the new room is indicated, change to_room */
                 if (world[counter].dir_option[counter2]->to_room_vnum == d->edit_number)
-                  world[counter].dir_option[counter2]->to_room = room_num;
+                  world[counter].dir_option[counter2]->to_room = &world[room_num];
               }
             }
           }
         } // end 'insert' else
         /* resolve all vnum doors to rnum doors in the newly edited room */
-        int opposite;
+        struct room_data *opposite = NULL;
         for (counter2 = 0; counter2 < NUM_OF_DIRS; counter2++) {
           if (world[room_num].dir_option[counter2]) {
-            world[room_num].dir_option[counter2]->to_room =
-              real_room(world[room_num].dir_option[counter2]->to_room_vnum);
+            vnum_t rnum = real_room(world[room_num].dir_option[counter2]->to_room_vnum);
+            if (rnum != NOWHERE)
+              world[room_num].dir_option[counter2]->to_room = &world[rnum];
+            else {
+              world[room_num].dir_option[counter2]->to_room = &world[0];
+            }
             if (counter2 < NUM_OF_DIRS) {
               opposite = world[room_num].dir_option[counter2]->to_room;
-              if (opposite != NOWHERE && world[opposite].dir_option[rev_dir[counter2]] &&
-                  world[opposite].dir_option[rev_dir[counter2]]->to_room == room_num) {
-                world[opposite].dir_option[rev_dir[counter2]]->material =
-                  world[room_num].dir_option[counter2]->material;
-                world[opposite].dir_option[rev_dir[counter2]]->barrier =
-                  world[room_num].dir_option[counter2]->barrier;
-                world[opposite].dir_option[rev_dir[counter2]]->condition =
-                  world[room_num].dir_option[counter2]->condition;
+              if (opposite && opposite->dir_option[rev_dir[counter2]] && opposite->dir_option[rev_dir[counter2]]->to_room == &world[room_num]) {
+                opposite->dir_option[rev_dir[counter2]]->material = world[room_num].dir_option[counter2]->material;
+                opposite->dir_option[rev_dir[counter2]]->barrier = world[room_num].dir_option[counter2]->barrier;
+                opposite->dir_option[rev_dir[counter2]]->condition = world[room_num].dir_option[counter2]->condition;
               }
             }
           }
@@ -565,7 +585,7 @@ void redit_parse(struct descriptor_data * d, const char *arg)
         PLR_FLAGS(d->character).RemoveBit(PLR_EDITING);
         STATE(d) = CON_PLAYING;
         char_to_room(CH, GET_WAS_IN(CH));
-        GET_WAS_IN(CH) = NOWHERE;
+        GET_WAS_IN(CH) = NULL;
         send_to_char("Done.\r\n", d->character);
         break;
       }
@@ -579,8 +599,8 @@ void redit_parse(struct descriptor_data * d, const char *arg)
         Mem->DeleteRoom(d->edit_room);
       d->edit_room = NULL;
       d->edit_number = 0;
-      char_to_room(CH, GET_WAS_IN(CH));
-      GET_WAS_IN(CH) = NOWHERE;
+        char_to_room(CH, GET_WAS_IN(CH));
+        GET_WAS_IN(CH) = NULL;
       break;
     default:
       send_to_char("Invalid choice!\r\n", d->character);
@@ -802,7 +822,7 @@ void redit_parse(struct descriptor_data * d, const char *arg)
     break;
   case REDIT_BACKGROUND2:
     number = atoi(arg);
-    if (number < 0 || number > AURA_PLAYERCOMBAT - 1) {
+    if (number < 0 || number >= AURA_PLAYERCOMBAT) {
       send_to_char(CH, "Number must be between 0 and %d. Enter Type: ", AURA_PLAYERCOMBAT - 1);
       return;
     }
@@ -830,6 +850,12 @@ void redit_parse(struct descriptor_data * d, const char *arg)
     if ((number < 0) || (number > ROOM_MAX)) {
       send_to_char("That's not a valid choice!\r\n", d->character);
       redit_disp_flag_menu(d);
+#ifndef DEATH_FLAGS
+    } else if (number == ROOM_DEATH + 1) {
+      send_to_char("Sorry, death flags have been disabled in this game.\r\n", d->character);
+      ROOM->room_flags.RemoveBit(number-1);
+      redit_disp_flag_menu(d);
+#endif
     } else {
       if (number == 0)
         /* back out */
@@ -1071,18 +1097,22 @@ void redit_parse(struct descriptor_data * d, const char *arg)
     break;
   case REDIT_EXIT_DOORFLAGS:
     number = atoi(arg);
-    if ((number < 0) || (number > 2)) {
+    if ((number < 0) || (number > 4)) {
       send_to_char("That's not a valid choice!\r\n", d->character);
       redit_disp_exit_flag_menu(d);
     } else {
       /* doors are a bit idiotic, don't you think? :) */
+      /* yep -LS */
       if (number == 0)
         d->edit_room->dir_option[d->edit_number2]->exit_info = 0;
       else if (number == 1)
         d->edit_room->dir_option[d->edit_number2]->exit_info = EX_ISDOOR;
       else if (number == 2)
-        d->edit_room->dir_option[d->edit_number2]->exit_info =
-          EX_ISDOOR | EX_PICKPROOF;
+        d->edit_room->dir_option[d->edit_number2]->exit_info = EX_ISDOOR | EX_PICKPROOF;
+      else if (number == 3)
+        d->edit_room->dir_option[d->edit_number2]->exit_info = EX_ISDOOR | EX_ASTRALLY_WARDED;
+      else if (number == 4)
+        d->edit_room->dir_option[d->edit_number2]->exit_info = EX_ISDOOR | EX_PICKPROOF | EX_ASTRALLY_WARDED;
       /* jump out to menu */
       redit_disp_exit_menu(d);
     }
@@ -1250,10 +1280,17 @@ void write_world_to_disk(int vnum)
 
           /* door flags need special handling, unfortunately. argh! */
           if (IS_SET(ptr->exit_info, EX_ISDOOR)) {
-            if (IS_SET(ptr->exit_info, EX_PICKPROOF))
-              temp_door_flag = 2;
-            else
-              temp_door_flag = 1;
+            if (IS_SET(ptr->exit_info, EX_ASTRALLY_WARDED)) {
+              if (IS_SET(ptr->exit_info, EX_PICKPROOF))
+                temp_door_flag = 4;
+              else
+                temp_door_flag = 3;
+            } else {
+              if (IS_SET(ptr->exit_info, EX_PICKPROOF))
+                temp_door_flag = 2;
+              else
+                temp_door_flag = 1;
+            }
           } else
             temp_door_flag = 0;
 

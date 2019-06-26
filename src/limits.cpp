@@ -78,8 +78,10 @@ void mental_gain(struct char_data * ch)
   if (find_workshop(ch, TYPE_MEDICAL))
     gain = (int)(gain * 1.5);
   
+#ifdef ENABLE_HUNGER
   if ((GET_COND(ch, FULL) == 0) || (GET_COND(ch, THIRST) == 0))
     gain >>= 1;
+#endif
   
   if (GET_TRADITION(ch) == TRAD_ADEPT)
     gain *= GET_POWER(ch, ADEPT_HEALING) + 1;
@@ -123,8 +125,10 @@ void physical_gain(struct char_data * ch)
       break;
   }
   
+#ifdef ENABLE_HUNGER
   if ((GET_COND(ch, FULL) == 0) || (GET_COND(ch, THIRST) == 0))
     gain >>= 1;
+#endif
   
   if (find_workshop(ch, TYPE_MEDICAL))
     gain = (int)(gain * 1.8);
@@ -303,12 +307,14 @@ void gain_condition(struct char_data * ch, int condition, int value)
   
   switch (condition)
   {
+#ifdef ENABLE_HUNGER
     case FULL:
       send_to_char("Your stomach growls.\r\n", ch);
       return;
     case THIRST:
       send_to_char("Your mouth is dry.\r\n", ch);
       return;
+#endif
     case DRUNK:
       if (intoxicated)
         send_to_char("Your head seems to clear slightly...\r\n", ch);
@@ -375,7 +381,7 @@ void check_idling(void)
     } else if (!IS_NPC(ch)) {
       ch->char_specials.timer++;
       if (!(IS_SENATOR(ch) || IS_WORKING(ch)) || !ch->desc) {
-        if (GET_WAS_IN(ch) == NOWHERE && ch->in_room != NOWHERE && ch->char_specials.timer > 15) {
+        if (!GET_WAS_IN(ch) && ch->in_room && ch->char_specials.timer > 15) {
           GET_WAS_IN(ch) = ch->in_room;
           if (FIGHTING(ch)) {
             stop_fighting(FIGHTING(ch));
@@ -384,11 +390,11 @@ void check_idling(void)
           act("$n disappears into the void.", TRUE, ch, 0, 0, TO_ROOM);
           send_to_char("You have been idle, and are pulled into a void.\r\n", ch);
           char_from_room(ch);
-          char_to_room(ch, 1);
+          char_to_room(ch, &world[1]);
         } else if (ch->char_specials.timer > 30) {
-          if (ch->in_room != NOWHERE)
+          if (ch->in_room)
             char_from_room(ch);
-          char_to_room(ch, 1);
+          char_to_room(ch, &world[1]);
           if (GET_QUEST(ch))
             end_quest(ch);
           if (ch->desc)
@@ -442,7 +448,7 @@ void check_swimming(struct char_data *ch)
   if (IS_NPC(ch) || IS_SENATOR(ch))
     return;
   
-  target = MAX(2, world[ch->in_room].rating);
+  target = MAX(2, ch->in_room->rating);
   if (GET_POS(ch) < POS_RESTING)
   {
     target -= success_test(MAX(1, (int)(GET_REAL_BOD(ch) / 3)), target);
@@ -530,7 +536,7 @@ void process_regeneration(int half_hour)
     }
   }
   /* blood stuff */
-  for (int i = 0; i < top_of_world; i++) {
+  for (int i = 0; i <= top_of_world; i++) {
     if (half_hour && world[i].blood > 0)
       world[i].blood--;
     if (world[i].icesheet[0])
@@ -560,6 +566,7 @@ void point_update(void)
       AFF_FLAGS(i).RemoveBit(AFF_DAMAGED);
       
       if (!GET_POWER(i, ADEPT_SUSTENANCE) || !(time_info.hours % 3)) {
+        // Leave this so that people's stomachs empty over time (can eat/drink more if they want to).
         gain_condition(i, FULL, -1);
         gain_condition(i, THIRST, -1);
       }
@@ -731,18 +738,38 @@ void point_update(void)
   ObjList.UpdateCounters();
 }
 
+vnum_t junkyard_room_numbers[] = {
+  RM_JUNKYARD_GATES, // Just Inside the Gates
+  RM_JUNKYARD_PARTS, // Rounding a Tottering Pile of Drone Parts
+  RM_JUNKYARD_GLASS, // Beside a Mound of Glass
+  RM_JUNKYARD_APPLI, // Amidst Aging Appliances
+  RM_JUNKYARD_ELECT  // The Electronics Scrapheap
+};
+
+// Returns TRUE if vehicle is in one of the Junkyard vehicle-depositing rooms, FALSE otherwise.
+bool veh_is_in_junkyard(struct veh_data *veh) {
+  if (!veh || !veh->in_room)
+    return FALSE;
+  
+  for (int index = 0; index < NUM_JUNKYARD_ROOMS; index++)
+    if (veh->in_room->number == junkyard_room_numbers[index])
+      return TRUE;
+  
+  return FALSE;
+}
+
 void save_vehicles(void)
 {
   struct veh_data *veh;
   FILE *fl;
   struct char_data *i;
-  long room, v;
+  long v;
+  struct room_data *temp_room = NULL;
   struct obj_data *obj;
   int num_veh = 0;
   bool found;
   for (veh = veh_list; veh; veh = veh->next)
-    if ((veh->owner > 0 && (veh->damage < 10 || veh->in_veh || ROOM_FLAGGED(veh->in_room, ROOM_GARAGE))) &&
-        (does_player_exist(veh->owner)))
+    if ((veh->owner > 0 && (veh->damage < 10 || !veh_is_in_junkyard(veh) || veh->in_veh || ROOM_FLAGGED(veh->in_room, ROOM_GARAGE))) && (does_player_exist(veh->owner)))
       num_veh++;
   
   if (!(fl = fopen("veh/vfile", "w"))) {
@@ -752,8 +779,22 @@ void save_vehicles(void)
   fprintf(fl, "%d\n", num_veh);
   fclose(fl);
   for (veh = veh_list, v = 0; veh && v < num_veh; veh = veh->next) {
-    if (veh->owner < 1 || (veh->damage >= 10 && !(veh->in_veh || ROOM_FLAGGED(veh->in_room, ROOM_GARAGE))))
+    // Skip NPC-owned vehicles and world vehicles.
+    if (veh->owner < 1)
       continue;
+    
+    bool send_veh_to_junkyard = FALSE;
+    if ((veh->damage >= 10 && !(veh->in_veh || ROOM_FLAGGED(veh->in_room, ROOM_GARAGE)))) {
+      // If the vehicle is wrecked and is in neither a containing vehicle nor a garage...
+      if (veh_is_in_junkyard(veh)) {
+        // If it's already in the junkyard, we don't save it-- they should have come and fixed it.
+        continue;
+      } else {
+        // If it's not in the junkyard yet, flag it for moving to the junkyard.
+        send_veh_to_junkyard = TRUE;
+      }
+    }
+    
     /* Disabling this code-- we want to save ownerless vehicles so that they can disgorge their contents when they load in next.
     if (!does_player_exist(veh->owner)) {
       veh->owner = 0;
@@ -782,36 +823,64 @@ void save_vehicles(void)
           break;
         }
     
-    room = veh->in_room;
-    if (!ROOM_FLAGGED(room, ROOM_GARAGE))
-      switch (zone_table[world[veh->in_room].zone].jurisdiction) {
-        case ZONE_PORTLAND:
-          switch (number(0, 2)) {
-            case 0:
-              room = real_room(RM_PORTLAND_PARKING_GARAGE);
-              break;
-            case 1:
-              room = real_room(RM_PORTLAND_PARKING_GARAGE);
-              break;
-            case 2:
-              room = real_room(RM_PORTLAND_PARKING_GARAGE);
-              break;
-          }
+    if (send_veh_to_junkyard) {
+      // Pick a spot and put the vehicle there. Sort roughly based on type.
+      int junkyard_number;
+      switch (veh->type) {
+        case VEH_DRONE:
+          // Drones in the drone spot.
+          junkyard_number = RM_JUNKYARD_PARTS;
           break;
-        case ZONE_SEATTLE:
-          room = real_room(RM_SEATTLE_PARKING_GARAGE);
+        case VEH_BIKE:
+          // Bikes in the bike spot.
+          junkyard_number = RM_JUNKYARD_BIKES;
           break;
-        case ZONE_CARIB:
-          room = real_room(RM_CARIB_PARKING_GARAGE);
+        case VEH_CAR:
+        case VEH_TRUCK:
+          // Standard vehicles just inside the gates.
+          junkyard_number = RM_JUNKYARD_GATES;
           break;
-        case ZONE_OCEAN:
-          room = real_room(RM_OCEAN_PARKING_GARAGE);
+        default:
+          // Pick a random one to scatter them about.
+          junkyard_number = junkyard_room_numbers[number(0, NUM_JUNKYARD_ROOMS)];
           break;
       }
+      temp_room = &world[real_room(junkyard_number)];
+    } else {
+      // If veh is not in a garage, send it to a garage.
+      temp_room = get_veh_in_room(veh);
+      if (!ROOM_FLAGGED(temp_room, ROOM_GARAGE)) {
+        switch (GET_JURISDICTION(veh->in_room)) {
+          case ZONE_PORTLAND:
+            switch (number(0, 2)) {
+              case 0:
+                temp_room = &world[real_room(RM_PORTLAND_PARKING_GARAGE)];
+                break;
+              case 1:
+                temp_room = &world[real_room(RM_PORTLAND_PARKING_GARAGE)];
+                break;
+              case 2:
+                temp_room = &world[real_room(RM_PORTLAND_PARKING_GARAGE)];
+                break;
+            }
+            break;
+          case ZONE_SEATTLE:
+            temp_room = &world[real_room(RM_SEATTLE_PARKING_GARAGE)];
+            break;
+          case ZONE_CARIB:
+            temp_room = &world[real_room(RM_CARIB_PARKING_GARAGE)];
+            break;
+          case ZONE_OCEAN:
+            temp_room = &world[real_room(RM_OCEAN_PARKING_GARAGE)];
+            break;
+        }
+      }
+    }
+    
     fprintf(fl, "[VEHICLE]\n");
     fprintf(fl, "\tVnum:\t%ld\n", veh_index[veh->veh_number].vnum);
     fprintf(fl, "\tOwner:\t%ld\n", veh->owner);
-    fprintf(fl, "\tInRoom:\t%ld\n", GET_ROOM_VNUM(room));
+    fprintf(fl, "\tInRoom:\t%ld\n", temp_room->number);
     fprintf(fl, "\tSubscribed:\t%d\n", veh->sub);
     fprintf(fl, "\tDamage:\t%d\n", veh->damage);
     fprintf(fl, "\tSpare:\t%ld\n", veh->spare);
@@ -1153,7 +1222,7 @@ void misc_update(void)
     }
     
     if (ch->points.fire[0] > 0) {
-      if (world[ch->in_room].sector_type != SPIRIT_HEARTH && !ROOM_FLAGGED(ch->in_room, ROOM_INDOORS) && weather_info.sky >= SKY_RAINING)
+      if (ch->in_room->sector_type != SPIRIT_HEARTH && !ROOM_FLAGGED(ch->in_room, ROOM_INDOORS) && weather_info.sky >= SKY_RAINING)
         ch->points.fire[0] -= 3;
       else
         ch->points.fire[0]--;

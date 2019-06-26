@@ -37,6 +37,7 @@ using namespace std;
 #include "constants.h"
 #include "quest.h"
 #include "transport.h"
+#include "newdb.h"
 
 const char *CCHAR;
 
@@ -48,7 +49,6 @@ extern class helpList WizHelp;
 extern char *short_object(int virt, int where);
 extern const char *dist_name[];
 
-extern char *prepare_quotes(char *dest, const char *str);
 extern int same_obj(struct obj_data * obj1, struct obj_data * obj2);
 extern int find_sight(struct char_data *ch);
 extern int belongs_to(struct char_data *ch, struct obj_data *obj);
@@ -882,7 +882,7 @@ void list_char_to_char(struct char_data * list, struct char_data * ch)
   struct veh_data *veh;
   
   // Show vehicle's contents to character.
-  if (ch->in_veh && ch->in_room == NOWHERE) {
+  if (ch->in_veh && !ch->in_room) {
     for (i = list; i; i = i->next_in_veh) {
       if (CAN_SEE(ch, i) && ch != i && ch->vfront == i->vfront) {
         list_one_char(i, ch);
@@ -893,7 +893,7 @@ void list_char_to_char(struct char_data * list, struct char_data * ch)
   // Show room's characters to character. Done this way because list_char_to_char should have been split for vehicles but wasn't.
   for (i = list; i; i = i->next_in_room) {
     // Skip them if they're invisible to us, or if they're us and we're not rigging.
-    if (!CAN_SEE(ch, i) || !(ch != i || ch->char_specials.rigging)) {
+    if (!CAN_SEE(ch, i) || !(ch != i || ch->char_specials.rigging) || (ch->in_veh && i->in_veh == ch->in_veh)) {
       continue;
     }
     
@@ -936,7 +936,7 @@ void list_char_to_char(struct char_data * list, struct char_data * ch)
 void disp_long_exits(struct char_data *ch, bool autom)
 {
   int door;
-  vnum_t wasin = NOWHERE;
+  struct room_data *wasin = NULL;
   struct veh_data *veh;
   *buf = '\0';
   buf2[0] = '\0'; // so strcats will start at the beginning
@@ -945,15 +945,15 @@ void disp_long_exits(struct char_data *ch, bool autom)
   if (veh)
   {
     wasin = ch->in_room;
-    ch->in_room = veh->in_room;
+    ch->in_room = get_veh_in_room(veh);
   }
   for (door = 0; door < NUM_OF_DIRS; door++)
   {
-    if (EXIT(ch, door) && EXIT(ch, door)->to_room != NOWHERE) {
+    if (EXIT(ch, door) && EXIT(ch, door)->to_room && EXIT(ch, door)->to_room != &world[0]) {
       if (GET_REAL_LEVEL(ch) >= LVL_BUILDER) {
         sprintf(buf2, "%-5s - [%5ld] %s%s\r\n", dirs[door],
-                world[EXIT(ch, door)->to_room].number,
-                world[EXIT(ch, door)->to_room].name,
+                EXIT(ch, door)->to_room->number,
+                EXIT(ch, door)->to_room->name,
                 (IS_SET(EXIT(ch, door)->exit_info, EX_CLOSED) ? " (closed)" : ""));
         if (autom)
           strcat(buf, "^c");
@@ -967,7 +967,7 @@ void disp_long_exits(struct char_data *ch, bool autom)
           if (IS_SET(EXIT(ch, door)->exit_info, EX_CLOSED))
             strcat(buf2, "A closed door");
           else
-            strcat(buf2, world[EXIT(ch, door)->to_room].name);
+            strcat(buf2, EXIT(ch, door)->to_room->name);
           strcat(buf2, "\r\n");
         }
         if (autom)
@@ -1002,11 +1002,12 @@ void do_auto_exits(struct char_data * ch)
   } else
   {
     for (door = 0; door < NUM_OF_DIRS; door++)
-      if (EXIT(ch, door) && EXIT(ch, door)->to_room != NOWHERE) {
+      if (EXIT(ch, door) && EXIT(ch, door)->to_room && EXIT(ch, door)->to_room != &world[0]) {
         if (ch->in_veh || ch->char_specials.rigging) {
           RIG_VEH(ch, veh);
           if (!ROOM_FLAGGED(EXIT(veh, door)->to_room, ROOM_ROAD) &&
-              !ROOM_FLAGGED(EXIT(veh, door)->to_room, ROOM_GARAGE) && !IS_SET(EXIT(ch, door)->exit_info, EX_HIDDEN))
+              !ROOM_FLAGGED(EXIT(veh, door)->to_room, ROOM_GARAGE) &&
+              !IS_SET(EXIT(ch, door)->exit_info, EX_HIDDEN))
             sprintf(ENDOF(buf), "(%s) ", exitdirs[door]);
           else if (!IS_SET(EXIT(ch, door)->exit_info, EX_CLOSED | EX_HIDDEN))
             sprintf(ENDOF(buf), "%s ", exitdirs[door]);
@@ -1037,24 +1038,32 @@ void update_blood(void)
   int i;
   extern rnum_t top_of_world;
   
-  for (i = 0; i < top_of_world; i++)
-    if (RM_BLOOD(i) > 0) {
-      RM_BLOOD(i)--;
-      if (!ROOM_FLAGGED(i, ROOM_INDOORS)) {
-        if (weather_info.sky == SKY_RAINING)
-          RM_BLOOD(i)--;
-        else if (weather_info.sky == SKY_LIGHTNING)
-          RM_BLOOD(i) -= 2;
+  for (i = 0; i < top_of_world; i++) {
+    if (world[i].blood > 0) {
+      world[i].blood--;
+      if (!ROOM_FLAGGED(&world[i], ROOM_INDOORS)) {
+        if (weather_info.sky == SKY_RAINING) {
+          world[i].blood--;
+          sprintf(buf, "%s the blood staining this area washes away in the rain.", world[i].blood > 3 ? "Some of" : (world[i].blood > 1 ? "Most of" : "The last of"));
+          send_to_room(buf, &world[i]);
+        } else if (weather_info.sky == SKY_LIGHTNING) {
+          world[i].blood -= 2;
+          sprintf(buf, "%s the blood staining this area washes away in the pounding rain.", world[i].blood > 4 ? "Some of" : (world[i].blood > 1 ? "Most of" : "The last of"));
+          send_to_room(buf, &world[i]);
+        }
       }
     }
+  }
 }
 
 void look_in_veh(struct char_data * ch)
 {
-  int was_in = NOWHERE;
+  struct room_data *was_in = NULL;
   if (!(AFF_FLAGGED(ch, AFF_RIG) || PLR_FLAGGED(ch, PLR_REMOTE)))
   {
-    if (ch->in_veh->in_room == NOWHERE && !ch->in_veh->in_veh) {
+    if (!ch->in_veh->in_room && !ch->in_veh->in_veh) {
+      sprintf(buf, "SYSERR: Character %s is not in a room or vehicle.", GET_CHAR_NAME(ch));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
       send_to_char("ALERT AN IMM!!\r\n", ch);
       return;
     }
@@ -1072,11 +1081,13 @@ void look_in_veh(struct char_data * ch)
       list_veh_to_char(ch->in_veh->carriedvehs, ch);
     }
   }
-  if (ch->in_room == NOWHERE || PLR_FLAGGED(ch, PLR_REMOTE))
+  if (!ch->in_room || PLR_FLAGGED(ch, PLR_REMOTE))
   {
     struct veh_data *veh;
     RIG_VEH(ch, veh);
-    if (veh->in_room == NOWHERE && !veh->in_veh) {
+    if (!veh->in_room && !veh->in_veh) {
+      sprintf(buf, "SYSERR: Vehicle %s is not in a room or vehicle.", GET_VEH_NAME(veh));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
       send_to_char("ALERT AN IMM!!\r\n", ch);
       return;
     }
@@ -1094,12 +1105,12 @@ void look_in_veh(struct char_data * ch)
       list_char_to_char(veh->in_veh->people, ch);
       ch->vfront = ov;
     } else {
-      send_to_char(ch, "\r\n^CAround you is %s\r\n", world[veh->in_room].name);
+      send_to_char(ch, "\r\n^CAround you is %s\r\n", veh->in_room->name);
       if (get_speed(veh) <= 200) {
-        if (world[veh->in_room].night_desc && weather_info.sunlight == SUN_DARK)
-          send_to_char(ch, world[veh->in_room].night_desc);
+        if (veh->in_room->night_desc && weather_info.sunlight == SUN_DARK)
+          send_to_char(ch, veh->in_room->night_desc);
         else
-          send_to_char(ch, world[veh->in_room].description);
+          send_to_char(ch, veh->in_room->description);
       }
       if (PLR_FLAGGED(ch, PLR_REMOTE))
         was_in = ch->in_room;
@@ -1107,63 +1118,64 @@ void look_in_veh(struct char_data * ch)
       do_auto_exits(ch);
       CCHAR = "^g";
       CGLOB = KGRN;
-      list_obj_to_char(world[veh->in_room].contents, ch, 0, FALSE, FALSE);
+      list_obj_to_char(veh->in_room->contents, ch, 0, FALSE, FALSE);
       CGLOB = KNRM;
       CCHAR = NULL;
-      list_char_to_char(world[veh->in_room].people, ch);
+      list_char_to_char(veh->in_room->people, ch);
       CCHAR = "^y";
-      list_veh_to_char(world[veh->in_room].vehicles, ch);
+      list_veh_to_char(veh->in_room->vehicles, ch);
       if (PLR_FLAGGED(ch, PLR_REMOTE))
         ch->in_room = was_in;
       else
-        ch->in_room = NOWHERE;
+        ch->in_room = NULL;
     }
   }
 }
 
 void look_at_room(struct char_data * ch, int ignore_brief)
 {
-  if (!LIGHT_OK(ch))
-  {
+  if (!LIGHT_OK(ch)) {
     send_to_char("It is pitch black...\r\n", ch);
     return;
   }
   
   // Streetlight code
-  if ((ch->in_veh && ch->in_room == NOWHERE) || PLR_FLAGGED(ch, PLR_REMOTE))
-  {
+  if (ch->in_veh && (!ch->in_room || PLR_FLAGGED(ch, PLR_REMOTE))) {
     look_in_veh(ch);
     return;
-  } else
-  {
-    if ((PRF_FLAGGED(ch, PRF_ROOMFLAGS) && GET_REAL_LEVEL(ch) >= LVL_BUILDER)) {
-      ROOM_FLAGS(ch->in_room).PrintBits(buf, MAX_STRING_LENGTH,
-                                        room_bits, ROOM_MAX);
-      sprintf(buf2, "^C[%5ld] %s [ %s ]^n", world[ch->in_room].number,
-              world[ch->in_room].name, buf);
-      send_to_char(buf2, ch);
-    } else
-      send_to_char(ch, "^C%s^n", world[ch->in_room].name, ch);
   }
-  send_to_char("\r\n", ch);
   
-  if (!(ch->in_veh && get_speed(ch->in_veh) > 200))
-  {
-    if (world[ch->in_room].night_desc && weather_info.sunlight == SUN_DARK)
-      send_to_char(world[ch->in_room].night_desc, ch);
+  if (!ch->in_room) {
+    send_to_char("Your mind is blasted by the eldritch horrors of the unknown void you're drifting in.\r\n", ch);
+    sprintf(buf, "SYSERR: %s tried to look at their room but is nowhere!", GET_CHAR_NAME(ch));
+    mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  if ((PRF_FLAGGED(ch, PRF_ROOMFLAGS) && GET_REAL_LEVEL(ch) >= LVL_BUILDER)) {
+    ROOM_FLAGS(ch->in_room).PrintBits(buf, MAX_STRING_LENGTH, room_bits, ROOM_MAX);
+    sprintf(buf2, "^C[%5ld] %s [ %s ]^n\r\n", GET_ROOM_VNUM(ch->in_room), GET_ROOM_NAME(ch->in_room), buf);
+    send_to_char(buf2, ch);
+  } else
+    send_to_char(ch, "^C%s^n\r\n", GET_ROOM_NAME(ch->in_room), ch);
+  
+  // TODO: Why is this code here? If you're in a vehicle, you do look_in_veh() above right?
+  if (!(ch->in_veh && get_speed(ch->in_veh) > 200)) {
+    if (ch->in_room->night_desc && weather_info.sunlight == SUN_DARK)
+      send_to_char(ch->in_room->night_desc, ch);
     else
-      send_to_char(world[ch->in_room].description, ch);
+      send_to_char(ch->in_room->description, ch);
   }
   
   /* autoexits */
   if (PRF_FLAGGED(ch, PRF_AUTOEXIT))
     do_auto_exits(ch);
   
-  if (RM_BLOOD(ch->in_room) > 0)
-    send_to_char(blood_messages[(int)RM_BLOOD(ch->in_room)], ch);
-  if (world[ch->in_room].background[0] && (IS_ASTRAL(ch) || IS_DUAL(ch))) {
-    if (world[ch->in_room].background[1] == AURA_POWERSITE) {
-      switch (world[ch->in_room].background[0]) {
+  if (ch->in_room->blood > 0)
+    send_to_char(blood_messages[(int) ch->in_room->blood], ch);
+  if (GET_BACKGROUND_COUNT(ch->in_room) && (IS_ASTRAL(ch) || IS_DUAL(ch))) {
+    if (GET_BACKGROUND_AURA(ch->in_room) == AURA_POWERSITE) {
+      switch (GET_BACKGROUND_COUNT(ch->in_room)) {
         case 1:
           send_to_char("^CAstral energy seems to be slightly concentrated here.^n\r\n", ch);
           break;
@@ -1179,10 +1191,16 @@ void look_at_room(struct char_data * ch, int ignore_brief)
         case 5:
           send_to_char("^CThe power of the astral energy here is nearly overwhelming.^n\r\n", ch);
           break;
+        default:
+          send_to_char("^RA horrific quantity of astral energy tears at your senses.^n\r\n", ch);
+          sprintf(buf, "SYSERR: '%s' (%ld) has powersite background count %d, which is greater than displayable max of 5.",
+                  ch->in_room->name, ch->in_room->number, GET_BACKGROUND_COUNT(ch->in_room));
+          mudlog(buf, ch, LOG_SYSLOG, TRUE);
+          break;
       }
-    } else if (world[ch->in_room].background[0] < 6) {
+    } else if (GET_BACKGROUND_COUNT(ch->in_room) < 6) {
       sprintf(buf, "^cA");
-      switch (world[ch->in_room].background[0]) {
+      switch (GET_BACKGROUND_COUNT(ch->in_room)) {
         case 1:
           strcat(buf, " distracting");
           break;
@@ -1199,41 +1217,45 @@ void look_at_room(struct char_data * ch, int ignore_brief)
           strcat(buf, "n overwhelming");
           break;
       }
-      sprintf(ENDOF(buf), " aura of %s pervades the area.^n\r\n", background_types[world[ch->in_room].background[1]]);
+      sprintf(ENDOF(buf), " aura of %s pervades the area.^n\r\n", background_types[GET_BACKGROUND_AURA(ch->in_room)]);
       send_to_char(buf, ch);
     } else {
       send_to_char("^RThe mana is warping here!^n\r\n", ch);
     }
   }
-  if (world[ch->in_room].vision[1])
-    switch (world[ch->in_room].vision[1])
-  {
-    case LIGHT_GLARE:
-      send_to_char("^CThe light is glaring off of everything in here.\r\n", ch);
-      break;
-    case LIGHT_MIST:
-      send_to_char("^LA light mist fills the area.\r\n", ch);
-      break;
-    case LIGHT_LIGHTSMOKE:
-    case LIGHT_THERMALSMOKE:
-      send_to_char("^LSmoke drifts through the area, obscuring your view.\r\n", ch);
-      break;
-    case LIGHT_HEAVYSMOKE:
-      send_to_char("^LThe air is thick with smoke.\r\n", ch);
-      break;
-  }
-  if (!ROOM_FLAGGED(ch->in_room, ROOM_INDOORS) && !IS_WATER(ch->in_room)) {
-    if (weather_info.sky >= SKY_RAINING)
-    {
-      send_to_char(ch, "^cRain splashes into the puddles around your feet.^n\r\n");
-    } else if (weather_info.lastrain < 5)
-    {
-      send_to_char(ch, "^cThe ground is wet, it must have rained recently.^n\r\n");
+  if (ch->in_room->vision[1]) {
+    switch (ch->in_room->vision[1]) {
+      case LIGHT_GLARE:
+        send_to_char("^CThe light is glaring off of everything in here.\r\n", ch);
+        break;
+      case LIGHT_MIST:
+        send_to_char("^LA light mist fills the area.\r\n", ch);
+        break;
+      case LIGHT_LIGHTSMOKE:
+      case LIGHT_THERMALSMOKE:
+        send_to_char("^LSmoke drifts through the area, obscuring your view.\r\n", ch);
+        break;
+      case LIGHT_HEAVYSMOKE:
+        send_to_char("^LThe air is thick with smoke.\r\n", ch);
+        break;
     }
   }
-  if (world[ch->in_room].poltergeist[0])
+  if (!ROOM_FLAGGED(ch->in_room, ROOM_INDOORS)) {
+    if (IS_WATER(ch->in_room)) {
+      if (weather_info.sky >= SKY_RAINING) {
+        send_to_char(ch, "^cThe water around you is dimpled by the falling rain.^n\r\n");
+      }
+    } else {
+      if (weather_info.sky >= SKY_RAINING) {
+        send_to_char(ch, "^cRain splashes into the puddles around your feet.^n\r\n");
+      } else if (weather_info.lastrain < 5) {
+        send_to_char(ch, "^cThe ground is wet, it must have rained recently.^n\r\n");
+      }
+    }
+  }
+  if (ch->in_room->poltergeist[0])
     send_to_char("^cAn invisible force is whipping small objects around the area.^n\r\n", ch);
-  if (world[ch->in_room].icesheet[0])
+  if (ch->in_room->icesheet[0])
     send_to_char("^CIce covers the floor.^n\r\n", ch);
   
   // Is there an elevator car here?
@@ -1244,7 +1266,7 @@ void look_at_room(struct char_data * ch, int ignore_brief)
       // Iterate through floors to see if a given floor matches the shaft's vnum.
       for (int floor = 0; !match && floor < elevator[index].num_floors; floor++) {
         // Check for a match.
-        if (elevator[index].floor[floor].shaft_vnum == world[ch->in_room].number) {
+        if (elevator[index].floor[floor].shaft_vnum == ch->in_room->number) {
           // Check for the car being at this floor.
           if (world[real_room(elevator[index].room)].rating == floor)
             send_to_char("^RThe massive bulk of an elevator car fills the hoistway, squeezing you aside.^n\r\n", ch);
@@ -1258,13 +1280,13 @@ void look_at_room(struct char_data * ch, int ignore_brief)
   // what fun just to get a colorized listing
   CCHAR = "^g";
   CGLOB = KGRN;
-  list_obj_to_char(world[ch->in_room].contents, ch, 0, FALSE, FALSE);
+  list_obj_to_char(ch->in_room->contents, ch, 0, FALSE, FALSE);
   CGLOB = KNRM;
   CCHAR = NULL;
-  list_obj_to_char(world[ch->in_room].contents, ch, 0, FALSE, TRUE);
-  list_char_to_char(world[ch->in_room].people, ch);
+  list_obj_to_char(ch->in_room->contents, ch, 0, FALSE, TRUE);
+  list_char_to_char(ch->in_room->people, ch);
   CCHAR = "^y";
-  list_veh_to_char(world[ch->in_room].vehicles, ch);
+  list_veh_to_char(ch->in_room->vehicles, ch);
 }
 
 void look_in_direction(struct char_data * ch, int dir)
@@ -1293,9 +1315,10 @@ void look_in_direction(struct char_data * ch, int dir)
     else if (IS_SET(EXIT(ch, dir)->exit_info, EX_ISDOOR) && EXIT(ch, dir)->keyword)
       send_to_char(ch, "The %s is open.\r\n", fname(EXIT(ch, dir)->keyword), !strcmp(fname(EXIT(ch, dir)->keyword), "doors") ? "are" : "is");
     
-    if(ROOM_FLAGGED(ch->in_room, ROOM_HOUSE)){
+    if (ROOM_FLAGGED(ch->in_room, ROOM_HOUSE)){
       /* Apartments have peepholes. */
-      int original_loc = ch->in_room, targ_loc = EXIT(ch, dir)->to_room;
+      struct room_data *original_loc = ch->in_room;
+      struct room_data *targ_loc = EXIT(ch, dir)->to_room;
       send_to_char("Through the peephole, you see:\r\n", ch);
       
       char_from_room(ch);
@@ -1315,40 +1338,56 @@ void look_in_obj(struct char_data * ch, char *arg, bool exa)
   struct veh_data *veh = NULL;
   int amt, bits;
   
-  if (!*arg)
+  if (!*arg) {
     send_to_char("Look in what?\r\n", ch);
-  else if (!(bits = generic_find(arg, FIND_OBJ_INV | FIND_OBJ_ROOM |
-                                 FIND_OBJ_EQUIP, ch, &dummy, &obj))
-           && !(!ch->in_veh &&(veh = get_veh_list(arg,
-                                                  world[ch->in_room].vehicles, ch))))
-  {
+    return;
+  }
+  
+  // Find the specified thing. Vehicle will take priority over object.
+  if (ch->in_veh) {
+    bits = generic_find(arg, FIND_OBJ_INV | FIND_OBJ_ROOM | FIND_OBJ_EQUIP, ch, &dummy, &obj);
+    veh = get_veh_list(arg, ch->in_veh->carriedvehs, ch);
+  } else {
+    bits = generic_find(arg, FIND_OBJ_INV | FIND_OBJ_ROOM | FIND_OBJ_EQUIP, ch, &dummy, &obj);
+    veh = get_veh_list(arg, ch->in_room->vehicles, ch);
+  }
+  
+  if (!bits && !veh) {
     sprintf(buf, "There doesn't seem to be %s %s here.\r\n", AN(arg), arg);
     send_to_char(buf, ch);
-  } else if (veh)
-  {
+    return;
+  }
+  
+  if (veh) {
+    struct veh_data *curr_in_veh = ch->in_veh;
+    bool curr_vfront = ch->vfront;
+    
     if (veh->cspeed > SPEED_IDLE) {
       if (success_test(GET_INT(ch) + GET_POWER(ch, ADEPT_IMPROVED_PERCEPT), 8)) {
         ch->in_veh = veh;
         ch->vfront = TRUE;
         look_in_veh(ch);
-        ch->in_veh = NULL;
-      } else
+      } else {
         send_to_char(ch, "It's moving too fast for you to get a good look inside.\r\n");
+        return;
+      }
     } else {
       for (struct char_data *vict = veh->people; vict; vict = vict->next_in_veh)
         act("$n peers inside.", FALSE, ch, 0, vict, TO_VICT);
       ch->in_veh = veh;
       ch->vfront = TRUE;
       look_in_veh(ch);
-      ch->in_veh = NULL;
     }
+    ch->in_veh = curr_in_veh;
+    curr_vfront = ch->vfront;
     return;
   } else if ((GET_OBJ_TYPE(obj) != ITEM_DRINKCON) &&
              (GET_OBJ_TYPE(obj) != ITEM_FOUNTAIN) &&
              (GET_OBJ_TYPE(obj) != ITEM_CONTAINER) &&
              (GET_OBJ_TYPE(obj) != ITEM_QUIVER) &&
              (GET_OBJ_TYPE(obj) != ITEM_HOLSTER) &&
-             (GET_OBJ_TYPE(obj) != ITEM_WORN))
+             (GET_OBJ_TYPE(obj) != ITEM_WORN) &&
+             (GET_OBJ_TYPE(obj) != ITEM_KEYRING))
     send_to_char("There's nothing inside that!\r\n", ch);
   else
   {
@@ -1369,8 +1408,8 @@ void look_in_obj(struct char_data * ch, char *arg, bool exa)
         list_obj_to_char(obj->contains, ch, 2, TRUE, FALSE);
       }
     } else if (GET_OBJ_TYPE(obj) == ITEM_CONTAINER || GET_OBJ_TYPE(obj) == ITEM_HOLSTER ||
-               GET_OBJ_TYPE(obj) == ITEM_QUIVER) {
-      if(IS_SET(GET_OBJ_VAL(obj, 1), CONT_CLOSED)) {
+               GET_OBJ_TYPE(obj) == ITEM_QUIVER || GET_OBJ_TYPE(obj) == ITEM_KEYRING) {
+      if (IS_SET(GET_OBJ_VAL(obj, 1), CONT_CLOSED)) {
         send_to_char("It is closed.\r\n", ch);
         return;
       } else {
@@ -1422,7 +1461,7 @@ char *find_exdesc(char *word, struct extra_descr_data * list)
 void look_at_target(struct char_data * ch, char *arg)
 {
   int bits, found = 0, j;
-  int was_in = ch->in_room;
+  struct room_data *was_in = ch->in_room;
   struct char_data *found_char = NULL;
   struct obj_data *obj = NULL, *found_obj = NULL;
   struct veh_data *found_veh = NULL;
@@ -1435,12 +1474,12 @@ void look_at_target(struct char_data * ch, char *arg)
   }
   if (ch->char_specials.rigging)
     if (ch->char_specials.rigging->type == VEH_DRONE)
-      ch->in_room = ch->char_specials.rigging->in_room;
+      ch->in_room = get_veh_in_room(ch->char_specials.rigging);
   
   bits = generic_find(arg, FIND_OBJ_INV | FIND_OBJ_ROOM | FIND_OBJ_EQUIP |
                       FIND_CHAR_ROOM, ch, &found_char, &found_obj);
   
-  if ((!str_cmp(arg, "self") || !str_cmp(arg, "me"))) {
+  if ((!str_cmp(arg, "self") || !str_cmp(arg, "me") || !str_cmp(arg, "myself"))) {
     if (AFF_FLAGGED(ch, AFF_RIG))
     {
       send_to_char(GET_VEH_DESC(ch->in_veh), ch);
@@ -1455,7 +1494,7 @@ void look_at_target(struct char_data * ch, char *arg)
   
   if (!ch->in_veh || (ch->in_veh && !ch->vfront))
   {
-    found_veh = get_veh_list(arg, ch->in_veh ? ch->in_veh->carriedvehs : world[ch->in_room].vehicles, ch);
+    found_veh = get_veh_list(arg, ch->in_veh ? ch->in_veh->carriedvehs : ch->in_room->vehicles, ch);
     if (found_veh) {
       send_to_char(GET_VEH_DESC(found_veh), ch);
       if (PLR_FLAGGED(ch, PLR_REMOTE))
@@ -1492,7 +1531,7 @@ void look_at_target(struct char_data * ch, char *arg)
     }
   }
   /* Does the argument match an extra desc in the room? */
-  if (ch->in_room != NOWHERE && (desc = find_exdesc(arg, world[ch->in_room].ex_description)) != NULL)
+  if (ch->in_room && (desc = find_exdesc(arg, ch->in_room->ex_description)) != NULL)
   {
     page_string(ch->desc, desc, 0);
     ch->in_room = was_in;
@@ -1526,8 +1565,8 @@ void look_at_target(struct char_data * ch, char *arg)
   }
   
   /* Does the argument match an extra desc of an object in the room? */
-  if (ch->in_room != NOWHERE)
-    for (obj = world[ch->in_room].contents; obj && !found; obj = obj->next_content)
+  if (ch->in_room)
+    for (obj = ch->in_room->contents; obj && !found; obj = obj->next_content)
       if (CAN_SEE_OBJ(ch, obj))
         if ((desc = find_exdesc(arg, obj->ex_description)) != NULL)
         {
@@ -1623,7 +1662,7 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
   bool has_pockets = FALSE, added_extra_carriage_return = FALSE, has_smartlink = FALSE;
   struct obj_data *access = NULL;
   
-  sprintf(buf, "OOC statistics for '^y%s^n':\r\n", ((j->text.name) ? j->text.name : "<None>"));
+  sprintf(buf, "^MOOC^n statistics for '^y%s^n':\r\n", ((j->text.name) ? j->text.name : "<None>"));
   
   sprinttype(GET_OBJ_TYPE(j), item_types, buf1);
   sprintf(ENDOF(buf), "It is %s ^c%s^n that weighs ^c%.2f^n kilos. It is made of ^c%s^n with a durability of ^c%d^n.\r\n",
@@ -1831,7 +1870,7 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
       }
       break;
     case ITEM_PATCH:
-      sprintf(ENDOF(buf), "It is a rating-^c%d^n ^c%s^n patch.", GET_OBJ_VAL(j, 1), patch_names[GET_OBJ_VAL(j, 0)]);
+      sprintf(ENDOF(buf), "It is a ^crating-%d %s^n patch.", GET_OBJ_VAL(j, 1), patch_names[GET_OBJ_VAL(j, 0)]);
       break;
     case ITEM_CYBERDECK:
       sprintf(ENDOF(buf), "MPCP: ^c%d^n, Hardening: ^c%d^n, Active: ^c%d^n, Storage: ^c%d^n, Load: ^c%d^n.",
@@ -1847,11 +1886,11 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
     case ITEM_BIOWARE:
       sprintf(ENDOF(buf), "It is a ^crating-%d %s%s^n that uses ^c%.2f^n index when installed.",
               GET_OBJ_VAL(j, 1), GET_OBJ_VAL(j, 2) || GET_OBJ_VAL(j, 0) >= BIO_CEREBRALBOOSTER ? "cultured " : "",
-              bio_types[GET_OBJ_VAL(j, 0)], ((float) GET_OBJ_VAL(j, 4) / 100));
+              decap_bio_types[GET_OBJ_VAL(j, 0)], ((float) GET_OBJ_VAL(j, 4) / 100));
       break;
     case ITEM_CYBERWARE:
       sprintf(ENDOF(buf), "It is a ^crating-%d %s-grade %s^n that uses ^c%.2f^n essence when installed.",
-              GET_OBJ_VAL(j, 1), cyber_grades[GET_OBJ_VAL(j, 2)], cyber_types[GET_OBJ_VAL(j, 0)],
+              GET_OBJ_VAL(j, 1), decap_cyber_grades[GET_OBJ_VAL(j, 2)], decap_cyber_types[GET_OBJ_VAL(j, 0)],
               ((float) GET_OBJ_VAL(j, 4) / 100));
       break;
     case ITEM_WORKSHOP:
@@ -1859,7 +1898,7 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
               GET_OBJ_VAL(j, 1) ? GET_OBJ_VAL(j, 1) == 3 ? "Facility": "Workshop" : "Kit", workshops[GET_OBJ_VAL(j, 0)]);
       break;
     case ITEM_FOCUS:
-      sprintf(ENDOF(buf), "Focus information not available-- you'll have to ASSENSE it.");
+      sprintf(ENDOF(buf), "It is a ^c%s^n focus of force ^c%d^n.", foci_type[GET_OBJ_VAL(j, 0)], GET_OBJ_VAL(j, 1));
       break;
     case ITEM_SPELL_FORMULA:
       sprintf(ENDOF(buf), "It is a ^cforce-%d %s^n designed for ^c%s^n mages.", GET_OBJ_VAL(j, 0),
@@ -1970,9 +2009,17 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
                 (GET_OBJ_VAL(j, 1) * GET_OBJ_VAL(j, 1)) * programs[GET_OBJ_VAL(j, 0)].multiplier);
       }
       break;
-    case ITEM_GUN_MAGAZINE:
-      // All info about these is displayed when you examine them.
     case ITEM_GUN_AMMO:
+      if (GET_OBJ_VAL(j, 3))
+        send_to_char(ch, "It has %d/%d %s round%s of %s ammunition left.\r\n", GET_OBJ_VAL(j, 0), GET_OBJ_VAL(j, 0) +
+                     GET_OBJ_VAL(j, 3), ammo_type[GET_OBJ_VAL(j, 2)].name,GET_OBJ_VAL(j, 0) != 1 ? "s" : "",
+                     weapon_type[GET_OBJ_VAL(j, 1)]);
+      else
+        send_to_char(ch, "It has %d %s round%s of %s ammunition left.\r\n", GET_OBJ_VAL(j, 0),
+                     ammo_type[GET_OBJ_VAL(j, 2)].name,GET_OBJ_VAL(j, 0) != 1 ? "s" : "",
+                     weapon_type[GET_OBJ_VAL(j, 1)]);
+      break;
+    case ITEM_GUN_MAGAZINE:
       // All info about these is displayed when you examine them.
     case ITEM_QUEST:
     case ITEM_OTHER:
@@ -2036,7 +2083,7 @@ ACMD(do_examine)
     look_at_target(ch, arg);
   
   if (!ch->in_veh || (ch->in_veh && !ch->vfront)) {
-    found_veh = get_veh_list(arg, ch->in_veh ? ch->in_veh->carriedvehs : world[ch->in_room].vehicles, ch);
+    found_veh = get_veh_list(arg, ch->in_veh ? ch->in_veh->carriedvehs : ch->in_room->vehicles, ch);
     if (found_veh) {
       if (subcmd == SCMD_PROBE) {
         // If they don't own the vehicle and the hood isn't open, they can't view the stats.
@@ -2076,7 +2123,7 @@ ACMD(do_examine)
     }
   }
   
-  if ((!str_cmp(arg, "self") || !str_cmp(arg, "me"))) {
+  if ((!str_cmp(arg, "self") || !str_cmp(arg, "me") || !str_cmp(arg, "myself"))) {
     struct veh_data *target_veh = NULL;
     if (AFF_FLAGGED(ch, AFF_RIG))
       target_veh = ch->in_veh;
@@ -2379,11 +2426,11 @@ const char *get_vision_string(struct char_data *ch, bool ascii_friendly=FALSE) {
   }
   
   if (ascii_friendly) {
-    if (AFF_FLAGGED(ch, AFF_DETECT_INVIS) && ch->in_room != NOWHERE && world[ch->in_room].silence[0] <= 0)
+    if (AFF_FLAGGED(ch, AFF_DETECT_INVIS) && get_ch_in_room(ch)->silence[0] <= 0)
         return "You have ultrasonic vision.";
   } else {
     if (AFF_FLAGGED(ch, AFF_DETECT_INVIS)) {
-      if (ch->in_room != NOWHERE && world[ch->in_room].silence[0] > 0)
+      if (get_ch_in_room(ch)->silence[0] > 0)
         return "Your ultrasonic vision is being suppressed by a field of silence here.\r\n";
       else
         return "You have ultrasonic vision.\r\n";
@@ -2528,11 +2575,13 @@ const char *get_plaintext_score_misc(struct char_data *ch) {
   if (IS_AFFECTED(ch, AFF_INVISIBLE) || IS_AFFECTED(ch, AFF_IMP_INVIS) || IS_AFFECTED(ch, AFF_SPELLINVIS) || IS_AFFECTED(ch, AFF_SPELLIMPINVIS))
     strcpy(ENDOF(buf2), "You are invisible.\r\n");
   
+#ifdef ENABLE_HUNGER
   if (GET_COND(ch, FULL) == 0)
     strcpy(ENDOF(buf2), "You are hungry.\r\n");
   
   if (GET_COND(ch, THIRST) == 0)
     strcpy(ENDOF(buf2), "You are thirsty.\r\n");
+#endif
   
   if (GET_COND(ch, DRUNK) > 10)
     strcpy(ENDOF(buf2), "You are intoxicated.\r\n");
@@ -2643,7 +2692,7 @@ ACMD(do_score)
               veh->sensor);
     }
   } else {
-    // TODO: Switches for the specific score types.
+    // Switches for the specific score types.
     if (*argument) {
       int cmd_index;
       
@@ -2842,10 +2891,17 @@ ACMD(do_score)
                           GET_REAL_WIL(ch), GET_WIL(ch), get_position_string(ch));
     sprintf(ENDOF(buf), "^L/^b/ ^nEssence       ^g[^w%5.2f^g]    ^W%-18s                       ^b/^L/\r\n",
                           ((float)GET_ESS(ch) / 100), invisibility_string);
+#ifdef ENABLE_HUNGER
     sprintf(ENDOF(buf), "^b/^L/ ^nBioware Index ^B[^w%5.2f^B]    ^n%-15s                          ^L/^b/\r\n",
                           ((float)GET_INDEX(ch) / 100), GET_COND(ch, FULL) == 0 ? "You are hungry." : "");
     sprintf(ENDOF(buf), "^L/^b/ ^nEssence Index ^W[^w%5.2f^W]    ^n%-16s                         ^b/^L/\r\n",
                           (((float)GET_ESS(ch) / 100) + 3), GET_COND(ch, THIRST) == 0 ? "You are thirsty." : "");
+#else
+    sprintf(ENDOF(buf), "^b/^L/ ^nBioware Index ^B[^w%5.2f^B]    ^n%-15s                          ^L/^b/\r\n",
+                          ((float)GET_INDEX(ch) / 100), "");
+    sprintf(ENDOF(buf), "^L/^b/ ^nEssence Index ^W[^w%5.2f^W]    ^n%-16s                         ^b/^L/\r\n",
+                          (((float)GET_ESS(ch) / 100) + 3), "");
+#endif
     sprintf(ENDOF(buf), "^b/^L/ ^nMagic         ^w%2d (^W%2d^w)    ^g%-20s                     ^L/^b/\r\n",
                           MAX(0, ((int)ch->real_abils.mag / 100)), ((int)GET_MAG(ch) / 100), GET_COND(ch, DRUNK) > 10 ? "You are intoxicated." : "");
     sprintf(ENDOF(buf), "^L/^b/ ^nReaction      ^w%2d (^W%2d^w)    ^c%-41s^b/^L/\r\n",
@@ -3077,7 +3133,7 @@ void display_help(char *help, const char *arg) {
   *help = '\0';
   
   // Buf now holds the quoted version of arg.
-  prepare_quotes(buf, arg);
+  prepare_quotes(buf, arg, sizeof(buf) / sizeof(buf[0]));
   
   // First strategy: Look for an exact match.
   sprintf(query, "SELECT * FROM help_topic WHERE name='%s'", buf);
@@ -3334,7 +3390,7 @@ ACMD(do_who)
           sprintf(buf1, "^L");
           break;
       }
-      if (PRF_FLAGGED(tch, PRF_SHOWGROUPTAG) && GET_PGROUP_DATA(tch) && GET_PGROUP(tch)) {
+      if (PRF_FLAGGED(tch, PRF_SHOWGROUPTAG) && GET_PGROUP_MEMBER_DATA(tch) && GET_PGROUP(tch)) {
         sprintf(buf2, "%10s :^N %s%s^N%s%s%s %s^n",
                 (GET_WHOTITLE(tch) ? GET_WHOTITLE(tch) : ""),
                 (GET_PGROUP(tch)->get_tag()),
@@ -3353,8 +3409,8 @@ ACMD(do_who)
       }
       strcat(buf1, buf2);
       
-      if ((GET_PGROUP_DATA(tch) && GET_PGROUP(tch) && !(GET_PGROUP(tch)->is_secret()))
-          && (GET_PGROUP_DATA(ch) && GET_PGROUP(ch))
+      if (GET_PGROUP_MEMBER_DATA(tch) && GET_PGROUP(tch) && !(GET_PGROUP(tch)->is_secret())
+          && GET_PGROUP_MEMBER_DATA(ch)
           && GET_PGROUP(ch) == GET_PGROUP(tch)) {
         sprintf(buf2, " ^G(^g%s^G)^n", GET_PGROUP(tch)->get_alias());
         strcat(buf1, buf2);
@@ -3706,9 +3762,8 @@ void print_object_location(int num, struct obj_data *obj, struct char_data *ch,
   else
     sprintf(buf + strlen(buf), "%33s", " - ");
   
-  if (obj->in_room > NOWHERE)
-    sprintf(buf + strlen(buf), "[%5ld] %s\r\n", world[obj->in_room].number,
-            world[obj->in_room].name);
+  if (obj->in_room)
+    sprintf(buf + strlen(buf), "[%5ld] %s\r\n", GET_ROOM_VNUM(obj->in_room), GET_ROOM_NAME(obj->in_room));
   else if (obj->carried_by)
     sprintf(buf + strlen(buf), "carried by %s\r\n", PERS(obj->carried_by, ch));
   else if (obj->worn_by)
@@ -3736,27 +3791,34 @@ void perform_immort_where(struct char_data * ch, char *arg)
     for (d = descriptor_list; d; d = d->next)
       if (!d->connected) {
         i = (d->original ? d->original : d->character);
-        if (i && CAN_SEE(ch, i) && (i->in_room != NOWHERE || i->in_veh)) {
+        if (i && CAN_SEE(ch, i) && (i->in_room || i->in_veh)) {
           if (d->original)
             if (d->character->in_veh)
-              sprintf(buf + strlen(buf), "%-20s - [%5ld] %s (in %s) (in %s)\r\n",
-                      GET_CHAR_NAME(i), world[d->character->in_room].number,
-                      world[d->character->in_veh->in_room].name, GET_NAME(d->character),
+              sprintf(buf + strlen(buf), "%-20s - [%5ld] %s (switched as %s) (in %s)\r\n",
+                      GET_CHAR_NAME(i),
+                      GET_ROOM_VNUM(get_ch_in_room(d->character)),
+                      GET_ROOM_NAME(get_ch_in_room(d->character)),
+                      GET_NAME(d->character),
                       GET_VEH_NAME(d->character->in_veh));
             else
               sprintf(buf + strlen(buf), "%-20s - [%5ld] %s (in %s)\r\n",
-                      GET_CHAR_NAME(i), world[d->character->in_room].number,
-                      world[d->character->in_room].name, GET_NAME(d->character));
+                      GET_CHAR_NAME(i),
+                      GET_ROOM_VNUM(get_ch_in_room(d->character)),
+                      GET_ROOM_NAME(get_ch_in_room(d->character)),
+                      GET_NAME(d->character));
           
             else
               if (i->in_veh)
                 sprintf(buf + strlen(buf), "%-20s - [%5ld] %s (in %s)\r\n",
                         GET_CHAR_NAME(i),
-                        world[i->in_veh->in_room].number, world[i->in_veh->in_room].name, GET_VEH_NAME(i->in_veh));
+                        GET_ROOM_VNUM(get_ch_in_room(i)),
+                        GET_ROOM_NAME(get_ch_in_room(i)),
+                        GET_VEH_NAME(i->in_veh));
               else
                 sprintf(buf + strlen(buf), "%-20s - [%5ld] %s\r\n",
                         GET_CHAR_NAME(i),
-                        world[i->in_room].number, world[i->in_room].name);
+                        GET_ROOM_VNUM(get_ch_in_room(i)),
+                        GET_ROOM_NAME(get_ch_in_room(i)));
         }
       }
     page_string(ch->desc, buf, 1);
@@ -3764,13 +3826,18 @@ void perform_immort_where(struct char_data * ch, char *arg)
   {
     *buf = '\0';
     for (i = character_list; i; i = i->next)
-      if (CAN_SEE(ch, i) && (i->in_room != NOWHERE || i->in_veh) &&
+      if (CAN_SEE(ch, i) && (i->in_room || i->in_veh) &&
           isname(arg, GET_KEYWORDS(i))) {
         found = 1;
-        sprintf(buf + strlen(buf), "M%3d. %-25s - [%5ld] %s\r\n", ++num,
+        sprintf(buf + strlen(buf), "M%3d. %-25s - [%5ld] %s", ++num,
                 GET_NAME(i),
-                (i->in_veh ? world[i->in_veh->in_room].number : world[i->in_room].number),
-                (i->in_veh ? GET_VEH_NAME(i->in_veh) : world[i->in_room].name));
+                GET_ROOM_VNUM(get_ch_in_room(i)),
+                GET_ROOM_NAME(get_ch_in_room(i)));
+        if (i->in_veh) {
+          sprintf(ENDOF(buf), " (in %s)\r\n", GET_VEH_NAME(i->in_veh));
+        } else {
+          strcat(buf, "\r\n");
+        }
       }
     found2 = ObjList.PrintList(ch, arg);
     
@@ -4054,7 +4121,8 @@ ACMD(do_scan)
   struct char_data *list;
   struct veh_data *veh, *in_veh = NULL;
   bool specific = FALSE, infra, lowlight, onethere, anythere = FALSE, done = FALSE;
-  int i = 0, j, was_in_room, dist = 3, x = NOWHERE;
+  int i = 0, j, dist = 3;
+  struct room_data *was_in = NULL, *x = NULL;
   
   if (AFF_FLAGGED(ch, AFF_DETECT_INVIS) && !(PLR_FLAGGED(ch, PLR_REMOTE) || AFF_FLAGGED(ch, AFF_RIG))) {
     send_to_char(ch, "The ultrasound distorts your vision.\r\n");
@@ -4074,7 +4142,7 @@ ACMD(do_scan)
   }
   if (ch->in_veh || ch->char_specials.rigging) {
     RIG_VEH(ch, in_veh);
-    if (ch->in_room != NOWHERE)
+    if (ch->in_room)
       x = ch->in_room;
     ch->in_room = in_veh->in_room;
   }
@@ -4093,7 +4161,7 @@ ACMD(do_scan)
         if (!((!infra && light_level(EXIT(ch, i)->to_room) == LIGHT_FULLDARK) ||
               ((!infra || !lowlight) && (light_level(EXIT(ch, i)->to_room) == LIGHT_MINLIGHT || light_level(EXIT(ch, i)->to_room) == LIGHT_PARTLIGHT)))) {
           strcpy(buf1, "");
-          for (list = world[EXIT(ch, i)->to_room].people; list; list = list->next_in_room)
+          for (list = EXIT(ch, i)->to_room->people; list; list = list->next_in_room)
             if (CAN_SEE(ch, list)) {
               if (in_veh) {
                 if (in_veh->cspeed > SPEED_IDLE) {
@@ -4119,7 +4187,7 @@ ACMD(do_scan)
               onethere = TRUE;
               anythere = TRUE;
             }
-          for (veh = world[EXIT(ch, i)->to_room].vehicles; veh; veh = veh->next_veh) {
+          for (veh = EXIT(ch, i)->to_room->vehicles; veh; veh = veh->next_veh) {
             if (in_veh) {
               if (in_veh->cspeed > SPEED_IDLE) {
                 if (get_speed(in_veh) >= 200) {
@@ -4154,10 +4222,7 @@ ACMD(do_scan)
     if (!anythere) {
       send_to_char("You don't seem to see anyone in the surrounding areas.\r\n", ch);
       if (in_veh) {
-        if (x > NOWHERE)
-          ch->in_room = x;
-        else
-          ch->in_room = NOWHERE;
+        ch->in_room = x;
       }
       return;
     }
@@ -4167,13 +4232,13 @@ ACMD(do_scan)
     dist = find_sight(ch);
     
     if (CAN_GO(ch, i)) {
-      was_in_room = ch->in_room;
+      was_in = ch->in_room;
       anythere = FALSE;
       for (j = 0;!done && (j < dist); ++j) {
         onethere = FALSE;
         if (CAN_GO(ch, i)) {
           strcpy(buf1, "");
-          for (list = world[EXIT(ch, i)->to_room].people; list; list = list->next_in_room)
+          for (list = EXIT(ch, i)->to_room->people; list; list = list->next_in_room)
             if (CAN_SEE(ch, list)) {
               if (in_veh) {
                 if (in_veh->cspeed > SPEED_IDLE) {
@@ -4210,34 +4275,25 @@ ACMD(do_scan)
           done = TRUE;
       }
       
-      ch->in_room = was_in_room;
+      ch->in_room = was_in;
       
       if (!anythere) {
         if (in_veh) {
-          if (x > NOWHERE)
-            ch->in_room = x;
-          else
-            ch->in_room = NOWHERE;
+          ch->in_room = x;
         }
         send_to_char("You don't seem to see anyone in that direction.\r\n", ch);
         return;
       }
     } else {
       if (in_veh) {
-        if (x > NOWHERE)
-          ch->in_room = x;
-        else
-          ch->in_room = NOWHERE;
+        ch->in_room = x;
       }
       send_to_char("There is no exit in that direction.\r\n", ch);
       return;
     }
   }
   if (in_veh) {
-    if (x > NOWHERE)
-      ch->in_room = x;
-    else
-      ch->in_room = NOWHERE;
+    ch->in_room = x;
   }
 }
 
