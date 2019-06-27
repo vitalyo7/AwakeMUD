@@ -79,7 +79,7 @@ void mental_gain(struct char_data * ch)
     gain = (int)(gain * 1.5);
   
 #ifdef ENABLE_HUNGER
-  if ((GET_COND(ch, FULL) == 0) || (GET_COND(ch, THIRST) == 0))
+  if ((GET_COND(ch, COND_FULL) == 0) || (GET_COND(ch, COND_THIRST) == 0))
     gain >>= 1;
 #endif
   
@@ -126,7 +126,7 @@ void physical_gain(struct char_data * ch)
   }
   
 #ifdef ENABLE_HUNGER
-  if ((GET_COND(ch, FULL) == 0) || (GET_COND(ch, THIRST) == 0))
+  if ((GET_COND(ch, COND_FULL) == 0) || (GET_COND(ch, COND_THIRST) == 0))
     gain >>= 1;
 #endif
   
@@ -264,7 +264,7 @@ void gain_condition(struct char_data * ch, int condition, int value)
   if (GET_COND(ch, condition) == -1)    /* No change */
     return;
   
-  intoxicated = (GET_COND(ch, DRUNK) > 0);
+  intoxicated = (GET_COND(ch, COND_DRUNK) > 0);
   
   if (value == -1) {
     for (bio = ch->bioware; bio; bio = bio->next_content) {
@@ -296,7 +296,7 @@ void gain_condition(struct char_data * ch, int condition, int value)
   GET_COND(ch, condition) += value;
   
   GET_COND(ch, condition) = MAX(0, GET_COND(ch, condition));
-  if ( condition == DRUNK )
+  if ( condition == COND_DRUNK )
     GET_COND(ch, condition) = MIN(24, GET_COND(ch, condition));
   else
     GET_COND(ch, condition) = MIN(24, GET_COND(ch, condition));
@@ -308,14 +308,14 @@ void gain_condition(struct char_data * ch, int condition, int value)
   switch (condition)
   {
 #ifdef ENABLE_HUNGER
-    case FULL:
+    case COND_FULL:
       send_to_char("Your stomach growls.\r\n", ch);
       return;
-    case THIRST:
+    case COND_THIRST:
       send_to_char("Your mouth is dry.\r\n", ch);
       return;
 #endif
-    case DRUNK:
+    case COND_DRUNK:
       if (intoxicated)
         send_to_char("Your head seems to clear slightly...\r\n", ch);
       return;
@@ -383,10 +383,10 @@ void check_idling(void)
       if (!(IS_SENATOR(ch) || IS_WORKING(ch)) || !ch->desc) {
         if (!GET_WAS_IN(ch) && ch->in_room && ch->char_specials.timer > 15) {
           GET_WAS_IN(ch) = ch->in_room;
-          if (FIGHTING(ch)) {
+          if (FIGHTING(ch))
             stop_fighting(FIGHTING(ch));
+          if (CH_IN_COMBAT(ch))
             stop_fighting(ch);
-          }
           act("$n disappears into the void.", TRUE, ch, 0, 0, TO_ROOM);
           send_to_char("You have been idle, and are pulled into a void.\r\n", ch);
           char_from_room(ch);
@@ -567,10 +567,10 @@ void point_update(void)
       
       if (!GET_POWER(i, ADEPT_SUSTENANCE) || !(time_info.hours % 3)) {
         // Leave this so that people's stomachs empty over time (can eat/drink more if they want to).
-        gain_condition(i, FULL, -1);
-        gain_condition(i, THIRST, -1);
+        gain_condition(i, COND_FULL, -1);
+        gain_condition(i, COND_THIRST, -1);
       }
-      gain_condition(i, DRUNK, -1);
+      gain_condition(i, COND_DRUNK, -1);
       if (GET_TEMP_ESSLOSS(i) > 0)
         GET_TEMP_ESSLOSS(i) = MAX(0, GET_TEMP_ESSLOSS(i) - 100);
       if (SHOTS_FIRED(i) >= 10000 && !SHOTS_TRIGGERED(i) && !number(0, 3)) {
@@ -1004,7 +1004,7 @@ void misc_update(void)
       }
     }
     
-    if (!FIGHTING(ch) && AFF_FLAGGED(ch, AFF_ACID))
+    if (!CH_IN_COMBAT(ch) && AFF_FLAGGED(ch, AFF_ACID))
       AFF_FLAGS(ch).RemoveBit(AFF_ACID);
     
     if (GET_SUSTAINED_NUM(ch) && !IS_ELEMENTAL(ch)) {
@@ -1083,7 +1083,7 @@ void misc_update(void)
     }
     
     if (!IS_NPC(ch)) {
-      if (!FIGHTING(ch))
+      if (!CH_IN_COMBAT(ch))
         check_adrenaline(ch, 0);
       if (GET_DRUG_DOSE(ch) && --GET_DRUG_DURATION(ch) < 0 && !GET_DRUG_STAGE(ch)) {
         bool physical = TRUE;
@@ -1127,7 +1127,7 @@ void misc_update(void)
           case DRUG_BURN:
             sprintf(buf, "You suddenly feel very intoxicated.\r\n");
             GET_DRUG_AFFECT(ch) = GET_DRUG_DOSE(ch) = GET_DRUG_DURATION(ch) = 0;
-            GET_COND(ch, DRUNK) = 24;
+            GET_COND(ch, COND_DRUNK) = 24;
             break;
           case DRUG_CRAM:
             sprintf(buf, "Your body feels alive with energy.\r\n");

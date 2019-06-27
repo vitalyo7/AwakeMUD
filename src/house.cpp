@@ -522,12 +522,12 @@ SPECIAL(landlord_spec)
 /* should do sanity checks on vnums & remove invalid records */
 void House_boot(void)
 {
-  vnum_t real_house, owner, land, paid;
+  vnum_t house_vnum, owner, landlord_vnum, paid, key_vnum;
   FILE *fl;
   int num_land;
   char line[256], name[20];
   int t[4];
-  struct house_control_rec *temp;
+  struct house_control_rec *temp = NULL;
   struct landlord *templ = NULL, *lastl = NULL;
   if (!(fl = fopen(HCONTROL_FILE, "r+b"))) {
     log("House control file does not exist.");
@@ -540,28 +540,37 @@ void House_boot(void)
 
   for (int i = 0; i < num_land; i++) {
     get_line(fl, line);
-    if (sscanf(line, "%ld %s %d %d", &land, name, t, t + 1) != 4) {
+    if (sscanf(line, "%ld %s %d %d", &landlord_vnum, name, t, t + 1) != 4) {
       fprintf(stderr, "Format error in landlord #%d.\r\n", i);
       return;
     }
-    ASSIGNMOB(land, landlord_spec);
+    if (real_mobile(landlord_vnum) < 0) {
+      log_vfprintf("SYSERR: Landlord vnum %ld does not match up with a real NPC. Terminating.\r\n", landlord_vnum);
+      exit(ERROR_CANNOT_RESOLVE_VNUM);
+    }
+    ASSIGNMOB(landlord_vnum, landlord_spec);
     templ = new struct landlord;
-    templ->vnum = land;
+    templ->vnum = landlord_vnum;
     templ->race.FromString(name);
     templ->basecost = t[0];
     templ->num_room = t[1];
     struct house_control_rec *last = NULL, *first = NULL;
     for (int x = 0; x < templ->num_room; x++) {
       get_line(fl, line);
-      if (sscanf(line, "%ld %ld %d %d %s %ld %d %ld", &real_house, &land, t, t + 1, name,
+      if (sscanf(line, "%ld %ld %d %d %s %ld %d %ld", &house_vnum, &key_vnum, t, t + 1, name,
                  &owner, t + 2, &paid) != 8) {
         fprintf(stderr, "Format error in landlord #%d room #%d.\r\n", i, x);
         return;
       }
+      if (real_room(house_vnum) < 0) {
+        log_vfprintf("SYSERR: House vnum %ld does not match up with a real room. Terminating.\r\n", landlord_vnum);
+        exit(ERROR_CANNOT_RESOLVE_VNUM);
+      }
+      
       temp = new struct house_control_rec;
-      temp->vnum = real_house;
-      temp->key = land;
-      temp->atrium = TOROOM(real_room(real_house), t[0]);
+      temp->vnum = house_vnum;
+      temp->key = key_vnum;
+      temp->atrium = TOROOM(real_room(house_vnum), t[0]);
       if (temp->atrium == NOWHERE) {
         log_vfprintf("You have an error in your house control file-- there is no valid %s (%d) exit for room %ld.",
                      dirs[t[0]], t[0], temp->vnum);
@@ -602,7 +611,7 @@ void House_boot(void)
         first = temp;
       if (temp->owner) {
         ROOM_FLAGS(&world[real_room(temp->vnum)]).SetBit(ROOM_HOUSE);
-        ROOM_FLAGS(&world[real_room(temp->atrium)]).SetBit(ROOM_ATRIUM);
+        ROOM_FLAGS(&world[temp->atrium]).SetBit(ROOM_ATRIUM);
       }
       last = temp;
     }

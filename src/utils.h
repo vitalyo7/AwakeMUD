@@ -273,6 +273,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define IS_LOW(room)	(light_level((room)) == LIGHT_MINLIGHT || light_level((room)) == LIGHT_PARTLIGHT)
 
 #define GET_ROOM_NAME(room) ((room) ? (room)->name : "(null room name)")
+#define GET_ROOM_DESC(room) ((room) ? ((room)->night_desc && weather_info.sunlight == SUN_DARK ? (room)->night_desc : (room)->description) : "(null room desc)")
 
 #define VALID_ROOM_RNUM(rnum) ((rnum) != NOWHERE && (rnum) <= top_of_world)
 
@@ -282,8 +283,10 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define GET_ROOM_VNUM(room) \
  ((vnum_t)((room) ? (room)->number : NOWHERE))
 
-#define GET_BACKGROUND_COUNT(room) ((room)->background[0])
-#define GET_BACKGROUND_AURA(room)  ((room)->background[1])
+#define GET_BACKGROUND_COUNT(room) ((room) ? (room)->background[0] : 0)
+#define GET_BACKGROUND_AURA(room)  ((room) ? (room)->background[1] : 0)
+#define GET_SETTABLE_BACKGROUND_COUNT(room) ((room)->background[0])
+#define GET_SETTABLE_BACKGROUND_AURA(room)  ((room)->background[1])
 
 /* zone utils ************************************************************/
 
@@ -386,6 +389,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define IS_CARRYING_N(ch)       ((ch)->char_specials.carry_items)
 #define FIGHTING(ch)            ((ch)->char_specials.fighting)
 #define FIGHTING_VEH(ch)        ((ch)->char_specials.fight_veh)
+#define CH_IN_COMBAT(ch)        (FIGHTING(ch) || FIGHTING_VEH(ch))
 #define HUNTING(ch)             ((ch)->char_specials.hunting)
 #define IS_NERVE(ch)		((ch)->char_specials.nervestrike)
 #define GET_TEMP_QUI_LOSS(ch)	((ch)->char_specials.tempquiloss)
@@ -605,15 +609,13 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 ( !(MOB_FLAGGED(obj, MOB_TOTALINVIS) && GET_LEVEL(sub) < LVL_BUILDER) \
   && (SELF((sub), (obj)) \
      || (SEE_ASTRAL((sub), (obj)) && LIGHT_OK_ROOM_SPECIFIED(sub, room_specified) && invis_ok(sub, obj) \
-        && (GET_INVIS_LEV(obj) <= 0 || access_level(sub, GET_INVIS_LEV(obj)) \
-        || access_level(sub, LVL_VICEPRES)))))
+        && (GET_INVIS_LEV(obj) <= 0 || access_level(sub, GET_INVIS_LEV(obj))))))
 
 #define CAN_SEE(sub, obj)      \
 ( !(MOB_FLAGGED(obj, MOB_TOTALINVIS) && GET_LEVEL(sub) < LVL_BUILDER) \
 && (SELF((sub), (obj)) \
 || (SEE_ASTRAL((sub), (obj)) && LIGHT_OK(sub) && invis_ok((sub), (obj)) \
-&& (GET_INVIS_LEV(obj) <= 0 || access_level(sub, GET_INVIS_LEV(obj)) \
-|| access_level(sub, LVL_VICEPRES)))))
+&& (GET_INVIS_LEV(obj) <= 0 || access_level(sub, GET_INVIS_LEV(obj))))))
 
 /* End of CAN_SEE */
 

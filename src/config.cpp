@@ -11,6 +11,7 @@ const char *NOOBJECT = "You don't see that here.\r\n";
 const char *YOU_NEED_OLC_FOR_THAT = "Please SET SELF OLC ON (or ask a higher-level staff member to do it).\r\n";
 const char *DEFAULT_POOFIN_STRING = "$n appears out of nowhere.";
 const char *DEFAULT_POOFOUT_STRING = "$n disappears in a flash of light.";
+const char *KILLER_FLAG_MESSAGE = "Your actions have earned you the KILLER flag, which makes you fair game to all player characters.\r\n";
 long newbie_start_room = 60500;
 //long mortal_start_room = 30700;
 long mortal_start_room = 35500;
@@ -54,25 +55,25 @@ const char *GREETINGS =
   "Forked from AwakeMUD 0.8.20 BETA, by Flynn, Fastjack, Rift, Washu, and Che.\r\n"
   "This is AwakeMUD Community Edition 0.9.0, by Lucien, Finster, and the community.\r\n"
   "\r\n"
-  "_____   .                    A            .              .   .       .\r\n"
-  "o o o\\            .        _/_\\_                                  |\\\r\n"
-  "------\\\\      .         __//...\\\\__                .              ||\\   .\r\n"
-  "__ A . |\\           .  <----------->     .                  .     ||||\r\n"
-  "HH|\\. .|||                \\\\\\|///                 ___|_           ||||\r\n"
-  "||| | . \\\\\\     A    .      |.|                  /|  .|    .      /||\\\r\n"
-  "  | | .  |||   / \\          |.|     .           | | ..|          /.||.\\\r\n"
-  "..| | . . \\\\\\ ||**|         |.|   _A_     ___   | | ..|         || |\\ .|\r\n"
-  "..| | , ,  |||||**|         |.|  /| |   /|   |  |.| ..|         || |*|*|\r\n"
-  "..|.| . . . \\\\\\|**|.  ____  |.| | | |  | |***|  |.| ..|  _____  || |*|*|\r\n"
-  "..|.| . . .  |||**| /|.. .| |.| |*|*|  | |*  | ___| ..|/|  .  | ||.|*|\\|\\\r\n"
-  "_________ . . \\\\\\*|| |.. .|//|\\\\|*|*_____| **||| ||  .| | ..  |/|| |*| |\\\\\r\n"
-  "AwakeMUD  \\ .  ||||| |..  // A \\\\*/| . ..| * ||| || ..| |  .  ||||,|*| | \\\r\n"
-  "By:        |\\ . \\\\\\| |.. // /|\\ \\\\ | . ..|** ||| || ..| | . . ||||.|*| |\\\\\r\n"
-  "Rift, Pook  \\\\.  ||| |..|| | | | ||| . ..| * ||| ||  .| | ..  ||||.|*| ||||\r\n"
-  "& Dunkelzahn ||  ||| |, ||.| | | ||| . ..| * ||| || ..| | . ..||||.|*| ||||\r\n"
+  "_____   ^C.^n                    ^WA^n            ^C.^n              ^W.^n   ^W.^n       ^C.^n\r\n"
+  "o o o\\            ^W.^n        ^W_/_\\_^n                                  |\\\r\n"
+  "------\\\\      ^c.^n         ^W__//...\\\\__^n                ^W.^n              ||\\   ^C.^n\r\n"
+  "__ A ^y.^n |\\           ^W.^n  ^r<^n-^r-^n-^r-^n-^r-^n-^r-^n-^r-^n-^r>^n     ^W.^n                  ^C.^n     ||||\r\n"
+  "HH|\\^y.^n .|||                ^W\\\\\\|///^n                 ___^R|^n_           ||||\r\n"
+  "||| | ^Y.^n \\\\\\     A    ^C.^n      ^W|^n.^W|^n                  /|  .|    ^W.^n      /||\\\r\n"
+  "  | | ^y.^n  |||   / \\          ^W|^n.^W|^n     .           | | ..|          /.||.\\\r\n"
+  "^y..^n| | ^y. .^n \\\\\\ ||^y*^n*|         ^W|^n.^W|^n   _A_     ___   | | ..|         || |\\ .|\r\n"
+  "^y..^n| | , ,  |||||^y**^n|         ^W|^n.^W|^n  /| |   /|   |  |.| ..|         || |*|*|\r\n"
+  "^Y.^W.^n|.| ^W.^n . ^y.^n \\\\\\|^Y*^y*^n|.  ____  ^W|^n.^W|^n | | |  | |^y*^Y*^y*^n|  |.| ..|  _____  || |*|*|\r\n"
+  ".^y.^n|.| . ^y.^n .  |||^y**^n| /|.. .| ^W|^n.^W|^n |^y*^n|^y*^n|  | |^y*^n  | ___| ..|/|  .  | ||.|*|\\|\\\r\n"
+  "-----------,. \\\\\\^y*^n|| |.. .|^W//|\\\\^n|*|*_____| ^y**^n||| ||  .| | ..  |/|| |*| |\\\\\r\n"
+  "AwakeMUD CE \\  ||||| |..  ^W// A \\\\^n*/| . ..| ^y*^n ||| || ..| |  .  ||||,|*| | \\\r\n"
+  " By Lucien  |\\. \\\\\\| |.. ^W// /|\\ \\\\^n | . ..|^y**^n ||| || ..| | . . ||||.|*| |\\\\\r\n"
+  "  and the    \\\\  ||| |..^W|| | | | ||^n| . ..| ^y*^n ||| ||  .| | ..  ||||.|*| ||||\r\n"
+  "CE Community  || ||| |, ^W||.| | | ||^n| . ..| ^y*^n ||| || ..| | . ..||||.|*| ||||\r\n"
   "---------------------------------------------------------------------------\r\n"
   "\r\n"
-  "Slot me some identification, chummer: ";
+  "What's your handle, chummer? ";
 
 const char *WELC_MESSG =
   "\r\n"
