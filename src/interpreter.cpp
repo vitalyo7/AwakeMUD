@@ -15,7 +15,6 @@
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
-#include <mysql/mysql.h>
 
 #include "structs.h"
 #include "awake.h"
@@ -34,7 +33,9 @@
 #include "config.h"
 #include "newmatrix.h"
 #include "security.h"
-#include "chargen.h"
+#include "protocol.h"
+#include "newdb.h"
+#include "helpedit.h"
 
 #if defined(__CYGWIN__)
 #include <crypt.h>
@@ -49,11 +50,6 @@ extern const char *QMENU;
 extern const char *WELC_MESSG;
 extern const char *START_MESSG;
 extern int restrict;
-extern MYSQL *mysql;
-extern int mysql_wrapper(MYSQL *mysql, const char *query);
-
-/* External handle modules */
-extern Chargen chargenHandler;
 
 /* external functions */
 void echo_on(struct descriptor_data * d);
@@ -64,9 +60,7 @@ int isbanned(char *hostname);
 void init_create_vars(struct descriptor_data *d);
 // for olc
 void vedit_parse(struct descriptor_data * d, const char *arg);
-
-// void create_parse(struct descriptor_data *d, const char *arg); // This is now done via chargen module
-
+void create_parse(struct descriptor_data *d, const char *arg);
 void iedit_parse(struct descriptor_data *d, const char *arg);
 void redit_parse(struct descriptor_data *d, const char *arg);
 void medit_parse(struct descriptor_data *d, const char *arg);
@@ -391,6 +385,8 @@ ACMD(do_hlist);
 ACMD(do_software);
 ACMD(do_design);
 ACMD(do_invitations);
+ACMD(do_debug);
+ACMD(do_helpedit);
 
 struct command_info cmd_info[] =
   {
@@ -434,6 +430,7 @@ struct command_info cmd_info[] =
     { "assist"   , POS_FIGHTING, do_assist   , 1, 0 },
     { "ask"      , POS_LYING   , do_spec_comm, 0, SCMD_ASK },
     { "award"    , POS_DEAD    , do_award    , LVL_FIXER, 0 },
+    { "authorize", POS_DEAD    , do_wizutil  , LVL_CONSPIRATOR, SCMD_AUTHORIZE },
     { "availoffset", POS_DEAD  , do_availoffset, 0, 0 },
 
     { "bond"     , POS_RESTING , do_bond     , 0, 0 },
@@ -479,6 +476,7 @@ struct command_info cmd_info[] =
     { "date"     , POS_DEAD    , do_date     , 0, SCMD_DATE },
     { "dc"       , POS_DEAD    , do_dc       , LVL_EXECUTIVE, 0 },
     { "deactivate", POS_RESTING, do_deactivate, 0, 0 },
+    { "debug"    , POS_DEAD    , do_debug    , LVL_PRESIDENT, 0 },
     { "decline"  , POS_LYING   , do_decline  , 0, 0 },
     { "decompress", POS_LYING  , do_compact  , 0, 1 },
     { "decorate" , POS_DEAD    , do_decorate , 0, 0 },
@@ -543,6 +541,8 @@ struct command_info cmd_info[] =
     { "hcontrol" , POS_DEAD    , do_hcontrol , LVL_EXECUTIVE, 0 },
     { "heal"     , POS_STANDING, do_heal     , 0, 0 },
     { "hedit"    , POS_DEAD    , do_hedit    , LVL_BUILDER, 0 },
+    { "helpedit" , POS_DEAD    , do_helpedit , LVL_DEVELOPER, 0 },
+    { "helpexport",POS_DEAD    , do_helpexport, LVL_DEVELOPER, 0 },
     { "hit"      , POS_FIGHTING, do_hit      , 0, SCMD_HIT },
     { "history"  , POS_DEAD    , do_message_history, 0, 0 },
     { "hlist"    , POS_DEAD    , do_hlist    , LVL_BUILDER, 0 },
@@ -1116,6 +1116,7 @@ ACMD(do_run);
 ACMD(do_tap);
 ACMD(do_talk);
 ACMD(do_trace);
+ACMD(do_fry_self);
 
 struct command_info mtx_info[] =
   {
@@ -1167,6 +1168,7 @@ struct command_info mtx_info[] =
     { "'", 0, do_say, 0, 0},
     { "score", 0, do_matrix_score, 0, 0},
     { "scan", 0, do_matrix_scan, 0, 0},
+    { "selffry", 0, do_fry_self, LVL_BUILDER, 0},
     { "talk", 0, do_talk, 0, 0},
     { "tap", 0, do_tap, 0, 0},
     { "tell", 0, do_tell, 0, 0 },
@@ -1269,6 +1271,15 @@ const char *reserved[] =
 
 void nonsensical_reply(struct char_data *ch)
 {
+  send_to_char(ch, "That is not a valid command.\r\n");
+  if (ch->desc && ++ch->desc->invalid_command_counter >= 5) {
+    send_to_char(ch, "^GStuck? Need help? Feel free to ask on the %s channel! (%s%s <message>)^n\r\n",
+                 PLR_FLAGGED(ch, PLR_NEWBIE) ? "newbie" : "OOC",
+                 PRF_FLAGGED(ch, PRF_SCREENREADER) ? "type " : "",
+                 PLR_FLAGGED(ch, PLR_NEWBIE) ? "NEWBIE" : "OOC");
+    ch->desc->invalid_command_counter = 0;
+  }
+  /*  Removing the prior 'funny' messages and replacing them with something understandable by MUD newbies.
   switch (number(1, 9))
   {
   case 1:
@@ -1298,6 +1309,7 @@ void nonsensical_reply(struct char_data *ch)
   case 9:
     send_to_char(ch, "You can't get ye flask!\r\n");
   }
+   */
 }
 
 /*
@@ -1319,6 +1331,10 @@ void command_interpreter(struct char_data * ch, char *argument, char *tcname)
   skip_spaces(&argument);
   if (!*argument)
     return;
+  
+  // They entered something? KaVir's protocol snippet says to clear their WriteOOB.
+  if (ch->desc)
+    ch->desc->pProtocol->WriteOOB = 0;
 
   /*
    * special case to handle one-character, non-alphanumeric commands;
@@ -1359,6 +1375,8 @@ void command_interpreter(struct char_data * ch, char *argument, char *tcname)
       if (*cmd_info[cmd].command == '\n') {
         nonsensical_reply(ch);
         return;
+      } else {
+        ch->desc->invalid_command_counter = 0;
       }
       
       // Their command was valid in external context. Inform them.
@@ -1377,9 +1395,13 @@ void command_interpreter(struct char_data * ch, char *argument, char *tcname)
     for (length = strlen(arg), cmd = 0; *rig_info[cmd].command != '\n'; cmd++)
       if (!strncmp(rig_info[cmd].command, arg, length))
         break;
-    if (*rig_info[cmd].command == '\n')
+    if (*rig_info[cmd].command == '\n') {
       nonsensical_reply(ch);
-    else if (!special(ch, cmd, line))
+      return;
+    } else {
+      ch->desc->invalid_command_counter = 0;
+    }
+    if (!special(ch, cmd, line))
       ((*rig_info[cmd].command_pointer) (ch, line, cmd, rig_info[cmd].subcmd));
   } else
   {
@@ -1393,6 +1415,8 @@ void command_interpreter(struct char_data * ch, char *argument, char *tcname)
     if (*cmd_info[cmd].command == '\n') {
       nonsensical_reply(ch);
       return;
+    } else {
+      ch->desc->invalid_command_counter = 0;
     }
     
     if (IS_PROJECT(ch) && AFF_FLAGGED(ch->desc->original, AFF_TRACKING) && cmd != find_command("track")) {
@@ -1405,7 +1429,7 @@ void command_interpreter(struct char_data * ch, char *argument, char *tcname)
         send_to_char("You try, but the mind-numbing cold prevents you...\r\n", ch);
         return;
       } else
-        send_to_char("The ice covering you crackles alarmingly as you slam your sovereign will through it.", ch);
+        send_to_char("The ice covering you crackles alarmingly as you slam your sovereign will through it.\r\n", ch);
     }
     
     if (AFF_FLAGGED(ch, AFF_PETRIFY) && cmd_info[cmd].minimum_position > POS_DEAD) {
@@ -1443,7 +1467,7 @@ void command_interpreter(struct char_data * ch, char *argument, char *tcname)
         send_to_char("Lie still; you are DEAD!!! :-(\r\n", ch);
         break;
       case POS_MORTALLYW:
-        send_to_char("You are in a pretty bad shape, unable to do anything!\r\n", ch);
+        send_to_char("You are in a pretty bad shape! You can either wait for help, or give up by typing DIE.\r\n", ch);
         break;
       case POS_STUNNED:
         send_to_char("All you can do right now is think about the stars!\r\n", ch);
@@ -2130,6 +2154,9 @@ int perform_dupe_check(struct descriptor_data *d)
     mudlog(buf, d->character, LOG_CONNLOG, TRUE);
     break;
   }
+  
+  // KaVir's protocol snippet.
+  MXPSendTag( d, "<VERSION>" );
 
   return 1;
 }
@@ -2215,10 +2242,13 @@ void nanny(struct descriptor_data * d, char *arg)
     init_parse(d, arg);
     break;
   case CON_CCREATE:
-	chargenHandler.create_parse(d, arg);
+    create_parse(d, arg);
     break;
   case CON_PGEDIT:
     pgedit_parse(d, arg);
+    break;
+  case CON_HELPEDIT:
+    helpedit_parse(d, arg);
     break;
   case CON_GET_NAME:            /* wait for input of name */
     d->idle_tics = 0;
@@ -2603,6 +2633,9 @@ void nanny(struct descriptor_data * d, char *arg)
       mudlog(buf, d->character, LOG_CONNLOG, TRUE);
 
       STATE(d) = CON_PLAYING;
+      
+      // KaVir's protocol snippet.
+      MXPSendTag( d, "<VERSION>" );
 
       look_at_room(d->character, 0);
       d->prompt_mode = 1;
