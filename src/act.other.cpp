@@ -15,7 +15,6 @@
 #include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <mysql/mysql.h>
 
 #include "structs.h"
 #include "utils.h"
@@ -44,18 +43,17 @@ extern char *short_object(int virt, int where);
 extern bool read_extratext(struct char_data * ch);
 extern int return_general(int skill_num);
 extern int belongs_to(struct char_data *ch, struct obj_data *obj);
-extern char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act);
+extern char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act, bool dont_capitalize_a_an);
+extern void weight_change_object(struct obj_data * obj, float weight);
 
 extern int ident;
 extern class memoryClass *Mem;
-extern MYSQL *mysql;
-extern int mysql_wrapper(MYSQL *mysql, const char *buf);
 
 /* extern procedures */
 ACMD_CONST(do_say);
 SPECIAL(shop_keeper);
 SPECIAL(spraypaint);
-extern char *how_good(int percent);
+extern char *how_good(int skill, int percent);
 extern void perform_tell(struct char_data *, struct char_data *, char *);
 extern void obj_magic(struct char_data * ch, struct obj_data * obj, char *argument);
 extern void end_quest(struct char_data *ch);
@@ -849,8 +847,7 @@ ACMD(do_gen_write)
     send_to_char("Could not open the file.  Sorry.\r\n", ch);
     return;
   }
-  fprintf(fl, "%-8s (%6.6s) [%5ld] %s\n", (ch->desc->original ? GET_CHAR_NAME(ch->desc->original) :
-                                           GET_CHAR_NAME(ch)), (tmp + 4), GET_ROOM_VNUM(ch->in_room), argument);
+  fprintf(fl, "%-8s (%6.6s) [%5ld] %s\n", GET_CHAR_NAME(ch), (tmp + 4), GET_ROOM_VNUM(get_ch_in_room(ch)), argument);
   fclose(fl);
   
 #ifdef GITHUB_INTEGRATION
@@ -1299,7 +1296,7 @@ ACMD(do_skills)
       if (i == SKILL_ENGLISH)
         i = SKILL_ANIMAL_HANDLING;
       if ((GET_SKILL(ch, i)) > 0) {
-        sprintf(buf2, "%-30s %s\r\n", skills[i].name, how_good(GET_SKILL(ch, i)));
+        sprintf(buf2, "%-30s %s\r\n", skills[i].name, how_good(i, GET_SKILL(ch, i)));
         strcat(buf, buf2);
       }
     }
@@ -1586,8 +1583,7 @@ ACMD(do_attach)
 {
   struct veh_data *veh = NULL;
   struct obj_data *item = NULL, *item2 = NULL;
-  int where = 0, j;
-  bool modified = FALSE;
+  int j;
 
   argument = any_one_arg(argument, buf1);
   argument = any_one_arg(argument, buf2);
@@ -1667,101 +1663,10 @@ ACMD(do_attach)
       return;
     }
   }
+
+  attach_attachment_to_weapon(item, item2, ch);
   
-  if (GET_OBJ_TYPE(item) != ITEM_GUN_ACCESSORY) {
-    send_to_char(ch, "%s is not a gun accessory.\r\n", CAP(GET_OBJ_NAME(item)));
-    return;
-  }
-
-  if (GET_OBJ_TYPE(item2) != ITEM_WEAPON || !IS_GUN(GET_WEAPON_ATTACK_TYPE(item2))) {
-    send_to_char(ch, "%s is not a gun.\r\n", CAP(GET_OBJ_NAME(item2)));
-    return;
-  }
-
-  if (GET_OBJ_VAL(item, 1) == ACCESS_SMARTGOGGLE) { // MAGIC FUCKING NUMBERS
-    send_to_char("These are for your eyes, not your gun.\r\n", ch);
-    return;
-  }
-
-  if (   ((GET_OBJ_VAL(item, 0) == 0) && (GET_WEAPON_ATTACH_TOP_VNUM(item2)    > 0))
-      || ((GET_OBJ_VAL(item, 0) == 1) && (GET_WEAPON_ATTACH_BARREL_VNUM(item2) > 0))
-      || ((GET_OBJ_VAL(item, 0) == 2) && (GET_WEAPON_ATTACH_UNDER_VNUM(item2)  > 0))) {
-    send_to_char(ch, "You cannot mount more than one accessory to the %s of that.\r\n", gun_accessory_locations[GET_OBJ_VAL(item, 0)]);
-    return;
-  }
-
-  if (   ((GET_OBJ_VAL(item, 0) == 0) && (GET_WEAPON_ATTACH_TOP_VNUM(item2)    == -1))
-      || ((GET_OBJ_VAL(item, 0) == 1) && (GET_WEAPON_ATTACH_BARREL_VNUM(item2) == -1))
-      || ((GET_OBJ_VAL(item, 0) == 2) && (GET_WEAPON_ATTACH_UNDER_VNUM(item2)  == -1))) {
-    sprintf(buf, "%s doesn't have any good spots for %s-mounted attachments.\r\n",
-            CAP(GET_OBJ_NAME(item2)), gun_accessory_locations[GET_OBJ_VAL(item, 0)]);
-    send_to_char(buf, ch);
-    return;
-  }
-
-  // wtf does this even do? val 0 for attachments is top/barrel/under. Looks like broken code. -LS
-  if ((GET_OBJ_VAL(item, 0) == 5 && !(GET_OBJ_VAL(item2, 4) == SKILL_PISTOLS)) ||
-      (GET_OBJ_VAL(item, 0) == 6 && !(GET_OBJ_VAL(item2, 4) == SKILL_RIFLES ||
-      GET_OBJ_VAL(item2, 4) == SKILL_SMG || GET_OBJ_VAL(item2, 4) == SKILL_ASSAULT_RIFLES))) {
-    sprintf(buf, "%s doesn't seem to fit on %s.\r\n",
-            CAP(GET_OBJ_NAME(item)), GET_OBJ_NAME(item2));
-    send_to_char(buf, ch);
-    return;
-  }
-
-  for (j = 0; (j < MAX_OBJ_AFFECT) && !modified; ++j) {
-    if (!(item2->affected[j].modifier)) {
-      item2->affected[j].location = item->affected[0].location;
-      item2->affected[j].modifier = item->affected[0].modifier;
-      modified = TRUE;
-    }
-  }
-
-  if (!modified) {
-    sprintf(buf, "You seem unable to connect %s to %s.\r\n",
-            GET_OBJ_NAME(item), GET_OBJ_NAME(item2));
-    send_to_char(buf, ch);
-    
-    sprintf(buf, "WARNING: %s (%ld) attempted to attach %s (%ld) to %s (%ld), but the gun was full up on affects. Something needs revising."
-            " Gun's current top/barrel/bottom attachment vnums are %d / %d / %d.",
-            GET_CHAR_NAME(ch), GET_IDNUM(ch),
-            GET_OBJ_NAME(item), GET_OBJ_VNUM(item),
-            GET_OBJ_NAME(item2), GET_OBJ_VNUM(item2),
-            GET_WEAPON_ATTACH_TOP_VNUM(item2),
-            GET_WEAPON_ATTACH_BARREL_VNUM(item2),
-            GET_WEAPON_ATTACH_UNDER_VNUM(item2));
-    mudlog(buf, ch, LOG_SYSLOG, TRUE);
-    return;
-  }
-
-  if (GET_OBJ_VAL(item, 0) == 0)
-    GET_OBJ_VAL(item2, 7) = GET_OBJ_VNUM(item);
-  else if (GET_OBJ_VAL(item, 0) == 1)
-    GET_OBJ_VAL(item2, 8) = GET_OBJ_VNUM(item);
-  else if (GET_OBJ_VAL(item, 0) == 2)
-    GET_OBJ_VAL(item2, 9) = GET_OBJ_VNUM(item);
-
-  GET_OBJ_WEIGHT(item2) += GET_OBJ_WEIGHT(item);
-  GET_OBJ_COST(item2) += GET_OBJ_COST(item);
-  if (item->obj_flags.bitvector.IsSet(AFF_LASER_SIGHT))
-    item2->obj_flags.bitvector.SetBit(AFF_LASER_SIGHT);
-  if (item->obj_flags.bitvector.IsSet(AFF_VISION_MAG_1))
-    item2->obj_flags.bitvector.SetBit(AFF_VISION_MAG_1);
-  if (item->obj_flags.bitvector.IsSet(AFF_VISION_MAG_2))
-    item2->obj_flags.bitvector.SetBit(AFF_VISION_MAG_2);
-  if (item->obj_flags.bitvector.IsSet(AFF_VISION_MAG_3))
-    item2->obj_flags.bitvector.SetBit(AFF_VISION_MAG_3);
-
-  where = GET_OBJ_VAL(item, 0);
-
-  sprintf(buf, "You attach $p to the %s of $P.",
-          (where == 0 ? "top" : (where == 1 ? "barrel" : "bottom")));
-  act(buf, TRUE, ch, item, item2, TO_CHAR);
-
-  sprintf(buf, "$n attaches $p to the %s of $P.",
-          (where == 0 ? "top" : (where == 1 ? "barrel" : "bottom")));
-  act(buf, TRUE, ch, item, item2, TO_ROOM);
-
+  // Trash the actual accessory object-- the game will look it up by vnum if it's ever needed.
   obj_from_char(item);
   extract_obj(item);
 }
@@ -1770,8 +1675,8 @@ ACMD(do_unattach)
 {
   struct veh_data *veh;
   struct obj_data *item, *gun;
-  int i, j, r_num;
-  bool found = FALSE, modified = FALSE;
+  int i, j;
+  bool found = FALSE;
 
   argument = any_one_arg(argument, buf1);
   argument = any_one_arg(argument, buf2);
@@ -1820,61 +1725,20 @@ ACMD(do_unattach)
     return;
   }
 
-  for (i = 7;i < 10 && !found;++i)
-    if (GET_OBJ_VAL(gun, i) > 0 && isname(buf1, short_object(GET_OBJ_VAL(gun, i), 1)))
+  for (i = ACCESS_LOCATION_TOP; i <= ACCESS_LOCATION_UNDER && !found; i++)
+    if (GET_OBJ_VAL(gun, i) > 0 && isname(buf1, short_object(GET_OBJ_VAL(gun, i), 1))) {
       found = TRUE;
-
-  /* subtract one from i to make it point to correct value */
-  i--;
+      break;
+    }
 
   if (!found) {
     act("That doesn't seem to be attached to $p.", FALSE, ch, gun, 0, TO_CHAR);
     return;
   }
 
-  if ((r_num = real_object(GET_OBJ_VAL(gun, i))) < 0) {
-    send_to_char("You accidentally break it as you remove it!\r\n", ch);
-    log("SYSERR: Trying to unattach nonexistant object from weapon");
-    GET_OBJ_VAL(gun, i) = 0;
-    return;
-  }
-
-  item = read_object(GET_OBJ_VAL(gun, i), VIRTUAL);
-  if (GET_OBJ_VAL(item, 1) == 3) {
-    act("You can't remove $p from $P!", FALSE, ch, item, gun, TO_CHAR);
-    extract_obj(item);
-    return;
-  }
-  obj_to_char(item, ch);
-  GET_OBJ_VAL(gun, i) = 0;
-  GET_OBJ_WEIGHT(gun) -= GET_OBJ_WEIGHT(item);
-  GET_OBJ_COST(gun) = MAX(GET_OBJ_COST(gun) - GET_OBJ_COST(item), 50);
-  GET_OBJ_COST(item) = 0;
-
-  if (gun->obj_flags.bitvector.IsSet(AFF_LASER_SIGHT) &&
-      item->obj_flags.bitvector.IsSet(AFF_LASER_SIGHT))
-    gun->obj_flags.bitvector.RemoveBit(AFF_LASER_SIGHT);
-  if (gun->obj_flags.bitvector.IsSet(AFF_VISION_MAG_1) &&
-      item->obj_flags.bitvector.IsSet(AFF_VISION_MAG_1))
-    gun->obj_flags.bitvector.RemoveBit(AFF_VISION_MAG_1);
-  if (gun->obj_flags.bitvector.IsSet(AFF_VISION_MAG_2) &&
-      item->obj_flags.bitvector.IsSet(AFF_VISION_MAG_2))
-    gun->obj_flags.bitvector.RemoveBit(AFF_VISION_MAG_2);
-  if (gun->obj_flags.bitvector.IsSet(AFF_VISION_MAG_3) &&
-      item->obj_flags.bitvector.IsSet(AFF_VISION_MAG_3))
-    gun->obj_flags.bitvector.RemoveBit(AFF_VISION_MAG_3);
-
-  for (j = 0;(j < MAX_OBJ_AFFECT) && !modified;++j) {
-    if ((gun->affected[j].location == item->affected[0].location) &&
-        (gun->affected[j].modifier == item->affected[0].modifier)) {
-      gun->affected[j].location = APPLY_NONE;
-      gun->affected[j].modifier = 0;
-      modified = TRUE;
-    }
-  }
-
-  act("You unattach $p from $P.", TRUE, ch, item, gun, TO_CHAR);
-  act("$n unattaches $p from $P.", TRUE, ch, item, gun, TO_ROOM);
+  item = unattach_attachment_from_weapon(i, gun, ch);
+  if (item)
+    obj_to_char(item, ch);
 }
 
 ACMD(do_treat)
@@ -2063,8 +1927,7 @@ ACMD(do_astral)
   if (!ch->player.astral_text.name)
     ch->player.astral_text.name = str_dup("a reflection");
   if (!ch->player.astral_text.room_desc)
-    ch->player.astral_text.room_desc =
-      str_dup("The reflection of some physical being stands here.\r\n");
+    ch->player.astral_text.room_desc = str_dup("The reflection of some physical being stands here.\r\n");
 
   GET_POS(ch) = POS_SITTING;
   astral = read_mobile(r_num, REAL);
@@ -2680,18 +2543,18 @@ ACMD(do_photo)
           send_to_char(ch, "You don't seem to see them through the viewfinder.\r\n");
           return;
         }
-        sprintf(buf2, "a photo of %s^n", decapitalize_a_an(make_desc(ch, i, buf, 2)));
+        sprintf(buf2, "a photo of %s^n", make_desc(ch, i, buf, 2, TRUE));
         if (i->in_veh) {
           sprintf(buf, "^c%s^c sitting in the %s of %s^n\r\n%s",
-                  make_desc(ch, i, buf3, 2),
+                  make_desc(ch, i, buf3, 2, FALSE),
                   i->vfront ? "front" : "back",
                   decapitalize_a_an(GET_VEH_NAME(i->in_veh)),
                   i->player.physical_text.look_desc);
         } else {
-          sprintf(buf, "^c%s^c in %s^n\r\n%s", make_desc(ch, i, buf3, 2),
+          sprintf(buf, "^c%s^c in %s^n\r\n%s", make_desc(ch, i, buf3, 2, FALSE),
                   GET_ROOM_NAME(ch->in_room), i->player.physical_text.look_desc);
         }
-        sprintf(buf + strlen(buf), "%s is using:\r\n", make_desc(ch, i, buf3, 2));
+        sprintf(buf + strlen(buf), "%s is using:\r\n", make_desc(ch, i, buf3, 2, FALSE));
         for (int j = 0; j < NUM_WEARS; j++)
           if (GET_EQ(i, j) && CAN_SEE_OBJ(ch, GET_EQ(i, j))) {
             // Describe special-case wielded/held objects.
@@ -2777,11 +2640,11 @@ ACMD(do_photo)
           strcat(buf, tch->player.physical_text.room_desc);
           continue;
         }
-        sprintf(buf + strlen(buf), "%s", make_desc(ch, tch, buf3, 2));
+        sprintf(buf + strlen(buf), "%s", make_desc(ch, tch, buf3, 2, FALSE));
         if (CH_IN_COMBAT(tch)) {
           strcat(buf, " is here, fighting ");
           if (FIGHTING(tch) == ch)
-            strcat(buf, "the photographer!");
+            strcat(buf, "the photographer");
           else if (FIGHTING_VEH(tch)) {
             strcat(buf, GET_VEH_NAME(FIGHTING_VEH(tch)));
           } else {
@@ -2792,14 +2655,13 @@ ACMD(do_photo)
                 strcat(buf, GET_NAME(FIGHTING(tch)));
             else
               strcat(buf, "someone in the distance");
-            strcat(buf, "!");
           }
-          strcat(buf, "\r\n");
+          strcat(buf, "!\r\n");
         } else {
           sprintf(ENDOF(buf), "%s", positions[(int)GET_POS(tch)]);
           if (GET_DEFPOS(tch))
             sprintf(ENDOF(buf), ", %s", GET_DEFPOS(tch));
-          strcat(buf, "\r\n");
+          strcat(buf, ".\r\n");
         }
       }
     for (struct obj_data *obj = ch->in_room->contents; obj; obj = obj->next_content) {
@@ -3077,7 +2939,7 @@ ACMD(do_assense)
         mag = 0;
       else if (init)
         mag -= GET_GRADE(vict) * 100;
-      strcpy(buf, make_desc(ch, vict, buf2, 2));
+      strcpy(buf, make_desc(ch, vict, buf2, 2, FALSE));
       if (success < 3) {
         if (vict->cyberware)
           strcat(buf, " has cyberware present and");
@@ -4006,8 +3868,10 @@ ACMD(do_tridlog)
   if (is_abbrev(arg, "display")) {
     send_to_char("Idnum	Author		Message\r\n"
                  "--------------------------------------------------------------------------------------\r\n", ch);
-    mysql_wrapper(mysql, "SELECT * FROM trideo_broadcast ORDER BY idnum");
-    res = mysql_use_result(mysql);
+    if (mysql_wrapper(mysql, "SELECT * FROM trideo_broadcast ORDER BY idnum"))
+      return;
+    if (!(res = mysql_use_result(mysql)))
+      return;
     while ((row = mysql_fetch_row(res)))
       send_to_char(ch, "%ld	%ld		%s\r\n", atol(row[0]), atol(row[1]), row[2]);
     mysql_free_result(res);
@@ -4021,7 +3885,7 @@ ACMD(do_tridlog)
   } else if (is_abbrev(arg, "delete")) {
     sprintf(buf, "DELETE FROM trideo_broadcast WHERE idnum=%d", atoi(buf2));
     mysql_wrapper(mysql, buf);
-    send_to_char("Deleted.", ch);
+    send_to_char("Deleted.\r\n", ch);
   }
 }
 

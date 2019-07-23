@@ -6,7 +6,7 @@ A fork of the [Awakened Worlds](http://awakenedworlds.net) MUD codebase. Issues 
 **Join our Discord channel!** https://discord.gg/q5VCMkv
 
 ## Features
-- 50k+ lines of additions including new areas, new features, and massive quality-of-life improvements
+- 62k+ lines of additions including new areas, new features, and massive quality-of-life improvements
 - Screenreader accessibility via TOGGLE SCREENREADER
 - Enhanced security that fixes several serious exploits
 - Significantly increased performance
@@ -14,22 +14,23 @@ A fork of the [Awakened Worlds](http://awakenedworlds.net) MUD codebase. Issues 
 
 ## OS Support
 Tested on:
-- OSX 10.12, 10.13
-- Ubuntu 14 and 16 LTS
-- Raspbian Jessie
+- OSX 10.14 (actively); 10.13 and 10.12 believed to work but not actively tested
+- Ubuntu 18 LTS (actively); 16 and 14 same as above
 - Amazon Linux
+- Raspbian Jessie (no longer actively tested)
 - Cygwin (beta)
 
-## Installation
-- Install clang (`apt-get install clang`)
-- Install MySQL 5, including its development headers (ensure `mysql/mysql.h` exists in your path).
-- Install [libsodium](https://github.com/jedisct1/libsodium/releases) (`./configure; make; (sudo) make install`). Version 1.0.16 is known to work.
-- Clone this repository to your machine.
-- Run `SQL/gensql.sh` (or do the steps manually if it doesn't support your OS). If you plan on running this with MariaDB, use the `--skip-checks` command-line flag.
-- Copy the mysql_config.cpp file to src.
-- Edit `src/Makefile` and uncomment the OS that looks closest to yours (comment out the others). The default is Mac OS X; you'll probably want to switch it to Linux. You probably also want to remove the `-DGITHUB_INTEGRATION` flag from the Makefile at this time.
-- From the src directory, run `make clean && make`.
-- Change to the root directory and run the game (ex: `gdb bin/awake`, or `lldb bin/awake` on OS X).
+## Installation (Ubuntu commands in parentheses)
+- Install [MySQL 5](https://dev.mysql.com/doc/refman/5.7/en/installing.html), including its development headers (ensure `mysql/mysql.h` exists in your path).
+- Install automake, make, gcc, g++, clang, libtool, autoconf, zlib1g-dev, libcurl4-openssl-dev, and libmysqlclient-dev if they're not already present (`sudo apt-get install automake make gcc g++ clang libtool autoconf zlib1g-dev libcurl4-openssl-dev libmysqlclient-dev`)
+- Install [libsodium](https://github.com/jedisct1/libsodium/releases) per their [installation instructions](https://download.libsodium.org/doc/installation). Version 1.0.16 is known to work, but higher versions should work as well.
+- Clone this repository to your machine. (`git clone https://github.com/luciensadi/AwakeMUD.git`)
+- Change to the repository's SQL directory (`cd AwakeMUD/SQL`)
+- Run `./gensql.sh` (or do the steps manually if it doesn't support your OS). If you plan on running this with MariaDB, use the `--skip-checks` command-line flag.
+- Change to the repository's SRC directory (`cd ../src`).
+- Edit `Makefile` and uncomment the OS that looks closest to yours by removing the # marks in front of it. Comment out the others by ensuring they have a # in front of their lines. The default is Mac OS X; you'll probably want to switch it to Linux. You probably also want to remove the `-DGITHUB_INTEGRATION` flag from the Makefile at this time.
+- From that same src directory, run `make clean && make`.
+- Change to the root directory (`cd ..`) and run the game (raw invocation `bin/awake`, or use a debugger like `gdb bin/awake`, or `lldb bin/awake` on OS X to help troubleshoot issues).
 - Connect to the game with telnet at `127.0.0.1:4000` and enjoy!
 
 ### Cygwin Installation Notes
@@ -65,3 +66,5 @@ If you get an error like `MYSQLERROR: Data too long for column 'Password' at row
 If you get an error like `error while loading shared libraries: libsodium.so.23: cannot open shared object file: No such file or directory`, your path does not include the directory libsodium is in. You can find libsodium.so's directory with `sudo find / -name libsodium.so`, then optionally symlink it with `ln -s /the/directory/it/was/in/libsodium.so.XXX /usr/lib/libsodium.so.XXX`, where XXX is the numbers indicated in the original error. This is probably not an ideal fix, so if anyone has a better suggestion, please file an issue!
 
 If you get an error like `MYSQLERROR: Table 'awakemud.pfiles_mail' doesn't exist`, you need to run the command found in `SQL/mail_fixes.sql` in your database. This will upgrade your database to be compatible with the new mail system. This command is automatically run for new databases.
+
+If it takes an exceedingly long time between you entering your password and the MUD responding, but the MUD is responsive for all other input, the machine that's hosting the MUD is not powerful enough for the password storage algorithm used by default. You may opt to either endure the delay (more secure, less convenient) or add `-DNOCRYPT` to your Makefile (not at all secure, convenient, will break all current passwords and require you to either fix them by hand or purge and re-create your database and all characters in it).

@@ -31,7 +31,6 @@ extern void kill_ems(char *);
 extern void init_char_sql(struct char_data *ch);
 static const char *const INDEX_FILENAME = "etc/pfiles/index";
 extern char *cleanup(char *dest, const char *src);
-extern MYSQL *mysql;
 extern void add_phone_to_list(struct obj_data *);
 extern Playergroup *loaded_playergroups;
 
@@ -127,14 +126,12 @@ static void init_char(struct char_data * ch)
   }
 
   if (!access_level(ch, LVL_VICEPRES))
-    for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
-    {
-      SET_SKILL(ch, i, 0)
+    for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++) {
+      set_character_skill(ch, i, 0, FALSE);
     }
   else
-    for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
-    {
-      SET_SKILL(ch, i, 100);
+    for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++) {
+      set_character_skill(ch, i, MAX_SKILL_LEVEL_FOR_IMMS, FALSE);
     }
 
   ch->char_specials.saved.affected_by.Clear();
@@ -347,7 +344,9 @@ bool load_char(const char *name, char_data *ch, bool logon)
   MYSQL_ROW row;
   sprintf(buf, "SELECT * FROM pfiles WHERE Name='%s';", name);
   mysql_wrapper(mysql, buf);
-  res = mysql_use_result(mysql);
+  if (!(res = mysql_use_result(mysql))) {
+    return FALSE;
+  }
   row = mysql_fetch_row(res);
   if (!row && mysql_field_count(mysql)) {
     mysql_free_result(res);
@@ -702,18 +701,12 @@ bool load_char(const char *name, char_data *ch, bool logon)
         if (GET_OBJ_TYPE(obj) == ITEM_FOCUS && GET_OBJ_VAL(obj, 4))
           GET_FOCI(ch)++;
         if (GET_OBJ_TYPE(obj) == ITEM_WEAPON && IS_GUN(GET_OBJ_VAL(obj, 3)))
-          for (int q = 7; q < 10; q++) 
+          for (int q = ACCESS_LOCATION_TOP; q <= ACCESS_LOCATION_UNDER; q++)
             if (GET_OBJ_VAL(obj, q) > 0 && real_object(GET_OBJ_VAL(obj, q)) > 0 && 
                (attach = &obj_proto[real_object(GET_OBJ_VAL(obj, q))])) {
-              GET_OBJ_WEIGHT(obj) += GET_OBJ_WEIGHT(attach);
-              if (attach->obj_flags.bitvector.IsSet(AFF_LASER_SIGHT))
-                obj->obj_flags.bitvector.SetBit(AFF_LASER_SIGHT);
-              if (attach->obj_flags.bitvector.IsSet(AFF_VISION_MAG_1))
-                obj->obj_flags.bitvector.SetBit(AFF_VISION_MAG_1);
-              if (attach->obj_flags.bitvector.IsSet(AFF_VISION_MAG_2))
-                obj->obj_flags.bitvector.SetBit(AFF_VISION_MAG_2);
-              if (attach->obj_flags.bitvector.IsSet(AFF_VISION_MAG_3))  
-                obj->obj_flags.bitvector.SetBit(AFF_VISION_MAG_3);
+              attach_attachment_to_weapon(attach, obj, NULL);
+              // Cost was already added to the object when it was attached in the first place, then saved, so we need to not re-add the cost.
+              GET_OBJ_COST(obj) -= GET_OBJ_COST(attach);
             }
         inside = atoi(row[17]);
         GET_OBJ_TIMER(obj) = atoi(row[19]);
@@ -773,18 +766,12 @@ bool load_char(const char *name, char_data *ch, bool logon)
         if (GET_OBJ_TYPE(obj) == ITEM_FOCUS && GET_OBJ_VAL(obj, 4))
           GET_FOCI(ch)++;
         if (GET_OBJ_TYPE(obj) == ITEM_WEAPON && IS_GUN(GET_OBJ_VAL(obj, 3)))
-          for (int q = 7; q < 10; q++) 
-            if (GET_OBJ_VAL(obj, q) > 0 && real_object(GET_OBJ_VAL(obj, q)) > 0 && 
-               (attach = &obj_proto[real_object(GET_OBJ_VAL(obj, q))])) {
-              GET_OBJ_WEIGHT(obj) += GET_OBJ_WEIGHT(attach);
-              if (attach->obj_flags.bitvector.IsSet(AFF_LASER_SIGHT))
-                obj->obj_flags.bitvector.SetBit(AFF_LASER_SIGHT);
-              if (attach->obj_flags.bitvector.IsSet(AFF_VISION_MAG_1))
-                obj->obj_flags.bitvector.SetBit(AFF_VISION_MAG_1);
-              if (attach->obj_flags.bitvector.IsSet(AFF_VISION_MAG_2))
-                obj->obj_flags.bitvector.SetBit(AFF_VISION_MAG_2);
-              if (attach->obj_flags.bitvector.IsSet(AFF_VISION_MAG_3))
-                obj->obj_flags.bitvector.SetBit(AFF_VISION_MAG_3);
+          for (int q = ACCESS_LOCATION_TOP; q <= ACCESS_LOCATION_UNDER; q++)
+            if (GET_OBJ_VAL(obj, q) > 0 && real_object(GET_OBJ_VAL(obj, q)) > 0 &&
+                (attach = &obj_proto[real_object(GET_OBJ_VAL(obj, q))])) {
+              attach_attachment_to_weapon(attach, obj, NULL);
+              // Fix for ever-increasing cost.
+              GET_OBJ_COST(obj) -= GET_OBJ_COST(attach);
             }
         inside = atoi(row[17]);
         GET_OBJ_TIMER(obj) = atoi(row[18]);
@@ -1415,6 +1402,10 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
                  GET_PGROUP_MEMBER_DATA(player)->rank,
                  GET_PGROUP_MEMBER_DATA(player)->privileges.ToString());
     mysql_wrapper(mysql, buf);
+  } else {
+    // Wipe any existing pgroup membership data.
+    sprintf(buf, "DELETE FROM pfiles_playergroups WHERE idnum=%ld", GET_IDNUM(player));
+    mysql_wrapper(mysql, buf);
   }
 
   return TRUE;
@@ -1760,9 +1751,10 @@ DBIndex::vnum_t PCIndex::find_open_id()
 bool does_player_exist(char *name)
 {
   char buf[MAX_STRING_LENGTH];
+  char prepare_quotes_buf[250];
   if (!name || !*name)
     return FALSE;
-  sprintf(buf, "SELECT idnum FROM pfiles WHERE Name='%s';", name);
+  sprintf(buf, "SELECT idnum FROM pfiles WHERE Name='%s';", prepare_quotes(prepare_quotes_buf, name, 250));
   if (mysql_wrapper(mysql, buf))
     return FALSE;
   MYSQL_RES *res = mysql_use_result(mysql);
@@ -1862,7 +1854,7 @@ void DeleteChar(long idx)
   mysql_wrapper(mysql, buf);
   
   // Update playergroup info.
-  sprintf(buf, "SELECT group FROM pfiles_playergroups WHERE idnum=%ld", idx);
+  sprintf(buf, "SELECT `group` FROM pfiles_playergroups WHERE idnum=%ld", idx);
   mysql_wrapper(mysql, buf);
   MYSQL_RES *res = mysql_use_result(mysql);
   MYSQL_ROW row;

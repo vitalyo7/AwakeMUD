@@ -3,7 +3,7 @@
 
 const char *awakemud_version[] =
     {
-      "AwakeMUD Community Edition, version 0.9.1 BETA\r\n"
+      "AwakeMUD Community Edition, version 0.9.0 BETA\r\n"
     };
 
 
@@ -1259,7 +1259,7 @@ struct skill_data skills[] =
     {"Sub-Machine Guns", QUI, SKILL_TYPE_ACTIVE, FALSE},
     {"Grenade Launchers", INT, SKILL_TYPE_ACTIVE, FALSE},
     {"Tasers", QUI, SKILL_TYPE_ACTIVE, FALSE},
-    {"Gunnery", INT, SKILL_TYPE_ACTIVE, FALSE},
+    {"Mounted Gunnery", INT, SKILL_TYPE_ACTIVE, FALSE},
     {"Machine Guns", STR, SKILL_TYPE_ACTIVE, FALSE},
     {"Missile Launchers", INT, SKILL_TYPE_ACTIVE, FALSE},
     {"Assault Cannons", STR, SKILL_TYPE_ACTIVE, FALSE},
@@ -1657,7 +1657,7 @@ int racial_limits[][2][6] = {
                               {{ 6, 8, 6, 8, 6, 6 },{ 9, 12, 9, 12, 9, 9 }} // night one
                             };
 
-char racial_attribute_modifiers[][6] = {
+int racial_attribute_modifiers[][6] = {
 //  BOD QUI STR CHA INT WIL
   {  0,  0,  0,  0,  0,  0  }, // undef
   {  0,  0,  0,  0,  0,  0  }, // undef

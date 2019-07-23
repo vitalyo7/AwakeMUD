@@ -17,7 +17,6 @@
 #include <sys/types.h>
 #include <stdarg.h>
 #include <iostream>
-#include <mysql/mysql.h>
 
 using namespace std;
 
@@ -42,6 +41,7 @@ using namespace std;
 #include "constants.h"
 #include "newmagic.h"
 #include "list.h"
+#include "newdb.h"
 
 extern class memoryClass *Mem;
 extern struct time_info_data time_info;
@@ -50,8 +50,7 @@ extern void die(struct char_data * ch);
 extern const char *log_types[];
 extern long beginning_of_time;
 extern int ability_cost(int abil, int level);
-extern MYSQL *mysql;
-extern int mysql_wrapper(MYSQL *mysql, const char *buf);
+extern void weight_change_object(struct obj_data * obj, float weight);
 
 extern char *colorize(struct descriptor_data *d, const char *str, bool skip_check = FALSE);
 
@@ -1315,7 +1314,6 @@ int get_skill(struct char_data *ch, int skill, int &target)
         case SKILL_PILOT_FIXEDWING:
         case SKILL_PILOT_VECTORTHRUST:
         case SKILL_PILOT_BIKE:
-        case SKILL_PILOT_FIXED_WING:
         case SKILL_PILOT_CAR:
         case SKILL_PILOT_TRUCK:
           // You only get the bonus for vehicle skills if you're physically driving the vehicle.
@@ -1680,7 +1678,7 @@ void remove_workshop_from_room(struct obj_data *obj) {
         case TYPE_KIT:
           break;
         default:
-          sprintf(buf, "SYSERR: Invalid workshop type %d found for object %s (%ld).", GET_WORKSHOP_GRADE(o), GET_OBJ_NAME(o), GET_OBJ_VNUM(o));
+          sprintf(buf, "SYSERR: Invalid workshop type %d found for object '%s' (%ld).", GET_WORKSHOP_GRADE(o), GET_OBJ_NAME(o), GET_OBJ_VNUM(o));
           mudlog(buf, NULL, LOG_SYSLOG, TRUE);
           break;
       }
@@ -1812,7 +1810,7 @@ void store_message_to_history(struct descriptor_data *d, int channel, const char
   if (d->message_history[channel].NumItems() > NUM_MESSAGES_TO_RETAIN) {
     // We're over the amount. Remove the tail, making sure we delete the contents.
     if (d->message_history[channel].Tail()->data)
-      delete d->message_history[channel].Tail()->data;
+      delete [] d->message_history[channel].Tail()->data;
     
     d->message_history[channel].RemoveItem(d->message_history[channel].Tail());
   }
@@ -1960,4 +1958,533 @@ struct char_data *get_driver(struct veh_data *veh) {
       return i;
   
   return NULL;
+}
+
+// Given a vnum, searches all objects and nested containers in the given container for the first match and returns it.
+struct obj_data *find_matching_obj_in_container(struct obj_data *container, vnum_t vnum) {
+  struct obj_data *result = NULL;
+  
+  // Nothing given to us? Nothing to find.
+  if (container == NULL)
+    return NULL;
+  
+  // Check each item in this container. If it's a match, return it; otherwise, check its contents.
+  for (struct obj_data *contents = container->contains; contents; contents = contents->next_content) {
+    if (GET_OBJ_VNUM(contents) == vnum)
+      return contents;
+    
+    if ((result = find_matching_obj_in_container(contents, vnum)))
+      return result;
+  }
+  
+  // If we got here, the item wasn't found anywhere.
+  return NULL;
+}
+
+bool attach_attachment_to_weapon(struct obj_data *attachment, struct obj_data *weapon, struct char_data *ch) {
+  if (!attachment || !weapon) {
+    if (ch)
+      send_to_char(ch, "Sorry, something went wrong. Staff have been notified.\r\n");
+    mudlog("SYSERR: NULL weapon or attachment passed to attach_attachment_to_weapon().", NULL, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  
+  if (GET_OBJ_TYPE(attachment) != ITEM_GUN_ACCESSORY) {
+    if (ch)
+      send_to_char(ch, "%s is not a gun accessory.\r\n", CAP(GET_OBJ_NAME(attachment)));
+    else {
+      sprintf(buf, "SYSERR: Attempting to attach non-attachment '%s' (%ld) to '%s' (%ld).",
+              GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment), GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    }
+    return FALSE;
+  }
+  
+  if (GET_OBJ_TYPE(weapon) != ITEM_WEAPON || !IS_GUN(GET_WEAPON_ATTACK_TYPE(weapon))) {
+    if (ch)
+      send_to_char(ch, "%s is not a gun.\r\n", CAP(GET_OBJ_NAME(weapon)));
+    else {
+      sprintf(buf, "SYSERR: Attempting to attach '%s' (%ld) to non-gun '%s' (%ld).",
+              GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment), GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    }
+    return FALSE;
+  }
+  
+  if (GET_OBJ_VAL(attachment, 1) == ACCESS_SMARTGOGGLE) {
+    if (ch)
+      send_to_char("These are for your eyes, not your gun.\r\n", ch);
+    else {
+      sprintf(buf, "SYSERR: Attempting to attach smartgoggle '%s' (%ld) to '%s' (%ld).",
+              GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment), GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    }
+    return FALSE;
+  }
+  
+  if (   ((GET_OBJ_VAL(attachment, 0) == 0) && (GET_WEAPON_ATTACH_TOP_VNUM(weapon)    > 0))
+      || ((GET_OBJ_VAL(attachment, 0) == 1) && (GET_WEAPON_ATTACH_BARREL_VNUM(weapon) > 0))
+      || ((GET_OBJ_VAL(attachment, 0) == 2) && (GET_WEAPON_ATTACH_UNDER_VNUM(weapon)  > 0))) {
+    if (ch) {
+      send_to_char(ch, "You cannot mount more than one attachment to the %s of that.\r\n", gun_accessory_locations[GET_OBJ_VAL(attachment, 0)]);
+      return FALSE;
+    }
+    // We assume the coder knows what they're doing (maybe it's a zload where the builder wants to replace a premade attachment with a better one?)
+  }
+  
+  if (   ((GET_OBJ_VAL(attachment, 0) == 0) && (GET_WEAPON_ATTACH_TOP_VNUM(weapon)    == -1))
+      || ((GET_OBJ_VAL(attachment, 0) == 1) && (GET_WEAPON_ATTACH_BARREL_VNUM(weapon) == -1))
+      || ((GET_OBJ_VAL(attachment, 0) == 2) && (GET_WEAPON_ATTACH_UNDER_VNUM(weapon)  == -1))) {
+    sprintf(buf, "%s isn't compatible with %s-mounted attachments.\r\n",
+            CAP(GET_OBJ_NAME(weapon)), gun_accessory_locations[GET_OBJ_VAL(attachment, 0)]);
+    if (ch) {
+      send_to_char(buf, ch);
+      return FALSE;
+    }
+    // We assume the coder knows what they're doing (maybe it's a zload where the builder wants to replace a premade attachment with a better one?)
+  }
+  
+  if (GET_ACCESSORY_ATTACH_LOCATION(attachment) < ACCESS_ACCESSORY_LOCATION_TOP
+      || GET_ACCESSORY_ATTACH_LOCATION(attachment) > ACCESS_ACCESSORY_LOCATION_UNDER) {
+    if (ch)
+      send_to_char(ch, "Sorry, something went wrong. Staff have been notified.\r\n");
+    sprintf(buf, "SYSERR: Accessory attachment location %d out of range for '%s' (%ld).",
+            GET_ACCESSORY_ATTACH_LOCATION(attachment), GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment));
+    mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  
+  if (GET_ACCESSORY_TYPE(attachment) == ACCESS_SILENCER && GET_WEAPON_SKILL(weapon) != SKILL_PISTOLS) {
+    if (ch) {
+      send_to_char(ch, "%s looks to be threaded for a pistol barrel only.\r\n", capitalize(GET_OBJ_NAME(attachment)));
+      return FALSE;
+    } else {
+      sprintf(buf, "WARNING: Attaching pistol silencer '%s' (%ld) to non-pistol '%s' (%ld).",
+              GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment), GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    }
+  }
+  
+  if (GET_ACCESSORY_TYPE(attachment) == ACCESS_SILENCER && !(GET_WEAPON_SKILL(weapon) == SKILL_PISTOLS
+                                                       || GET_WEAPON_SKILL(weapon) == SKILL_RIFLES
+                                                       || GET_WEAPON_SKILL(weapon) == SKILL_ASSAULT_RIFLES)) {
+    if (ch) {
+      send_to_char("Sound suppressors can only be attached to rifles, assault rifles, and SMGs.\r\n", ch);
+      return FALSE;
+    } else {
+      sprintf(buf, "WARNING; Attaching rifle/AR/SMG silencer '%s' (%ld) to non-qualifying weapon '%s' (%ld).",
+              GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment), GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    }
+  }
+  
+  // Transfer the first (and only the first) affect from the attachment to the weapon.
+  if (attachment->affected[0].modifier != 0) {
+    bool successfully_modified = FALSE;
+    for (int index = 0; index < MAX_OBJ_AFFECT; index++) {
+      if (!(weapon->affected[index].modifier)) {
+        weapon->affected[index].location = attachment->affected[0].location;
+        weapon->affected[index].modifier = attachment->affected[0].modifier;
+        successfully_modified = TRUE;
+        break;
+      }
+    }
+    
+    if (!successfully_modified) {
+      if (ch) {
+        sprintf(buf, "You seem unable to attach %s to %s.\r\n",
+                GET_OBJ_NAME(attachment), GET_OBJ_NAME(weapon));
+        send_to_char(buf, ch);
+      }
+      
+      sprintf(buf, "WARNING: '%s' (%ld) attempted to attach '%s' (%ld) to '%s' (%ld), but the gun was full up on affects. Something needs revising."
+              " Gun's current top/barrel/bottom attachment vnums are %d / %d / %d.",
+              ch ? GET_CHAR_NAME(ch) : "An automated process", ch ? GET_IDNUM(ch) : -1,
+              GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment),
+              GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon),
+              GET_WEAPON_ATTACH_TOP_VNUM(weapon),
+              GET_WEAPON_ATTACH_BARREL_VNUM(weapon),
+              GET_WEAPON_ATTACH_UNDER_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+      return FALSE;
+    }
+  }
+  
+  // Add the attachment's weight to the weapon's weight.
+  weight_change_object(weapon, GET_OBJ_WEIGHT(attachment));
+  
+  // Add the attachment's cost to the weapon's cost.
+  GET_OBJ_COST(weapon) = MAX(0, GET_OBJ_COST(weapon) + GET_OBJ_COST(attachment));
+  
+  // Update the weapon's aff flags.
+  if (attachment->obj_flags.bitvector.IsSet(AFF_LASER_SIGHT))
+    weapon->obj_flags.bitvector.SetBit(AFF_LASER_SIGHT);
+  if (attachment->obj_flags.bitvector.IsSet(AFF_VISION_MAG_1))
+    weapon->obj_flags.bitvector.SetBit(AFF_VISION_MAG_1);
+  if (attachment->obj_flags.bitvector.IsSet(AFF_VISION_MAG_2))
+    weapon->obj_flags.bitvector.SetBit(AFF_VISION_MAG_2);
+  if (attachment->obj_flags.bitvector.IsSet(AFF_VISION_MAG_3))
+    weapon->obj_flags.bitvector.SetBit(AFF_VISION_MAG_3);
+  
+  // Update the weapon's attach location to reflect this item.
+  GET_OBJ_VAL(weapon, GET_ACCESSORY_ATTACH_LOCATION(attachment) + 7) = GET_OBJ_VNUM(attachment);
+  
+  // Send the success message, assuming there's a character.
+  if (ch) {
+    int where = GET_ACCESSORY_ATTACH_LOCATION(attachment);
+    
+    sprintf(buf, "You attach $p to the %s of $P.",
+            (where == 0 ? "top" : (where == 1 ? "barrel" : "underside")));
+    act(buf, TRUE, ch, attachment, weapon, TO_CHAR);
+    
+    sprintf(buf, "$n attaches $p to the %s of $P.",
+            (where == 0 ? "top" : (where == 1 ? "barrel" : "underside")));
+    act(buf, TRUE, ch, attachment, weapon, TO_ROOM);
+  } else {
+#ifdef DEBUG_ATTACHMENTS
+    sprintf(buf, "Successfully attached '%s' (%ld) to the %s of '%s' (%ld).",
+            GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment),
+            gun_accessory_locations[GET_OBJ_VAL(attachment, 0)],
+            GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+    mudlog(buf, ch, LOG_SYSLOG, TRUE);
+#endif
+  }
+  
+  // Let the caller handle trashing the object (assuming they didn't just pass us a proto reference).
+
+  return TRUE;
+}
+
+struct obj_data *unattach_attachment_from_weapon(int location, struct obj_data *weapon, struct char_data *ch) {
+  if (!weapon) {
+    if (ch)
+      send_to_char(ch, "Sorry, something went wrong. Staff have been notified.\r\n");
+    mudlog("SYSERR: NULL weapon passed to unattach_attachment_from_weapon().", NULL, LOG_SYSLOG, TRUE);
+    return NULL;
+  }
+  
+  if (location < ACCESS_LOCATION_TOP || location > ACCESS_LOCATION_UNDER) {
+    if (ch)
+      send_to_char(ch, "Sorry, something went wrong. Staff have been notified.\r\n");
+    sprintf(buf, "SYSERR: Attempt to unattach item from invalid location %d on '%s' (%ld).",
+            location, GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+  }
+  
+  if (GET_OBJ_TYPE(weapon) != ITEM_WEAPON) {
+    if (ch)
+      send_to_char("You can only unattach accessories from weapons.\r\n", ch);
+    else {
+      sprintf(buf, "SYSERR: Attempting to unattach something from non-weapon '%s' (%ld).",
+              GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    }
+    return NULL;
+  }
+  
+  // Get a pointer to the attachment so that we can reference it.
+  struct obj_data *attachment = read_object(GET_WEAPON_ATTACH_LOC(weapon, location), VIRTUAL);
+  
+  // If the attachment was un-loadable, bail out.
+  if (!attachment) {
+    if (ch)
+      send_to_char("You accidentally break it as you remove it!\r\n", ch);
+    sprintf(buf, "SYSERR: Attempting to unattach invalid vnum %d from weapon '%s' (%ld).",
+            GET_WEAPON_ATTACH_LOC(weapon, location), GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+    mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    
+    // We use a raw get_obj_val here so we can set it.
+    GET_OBJ_VAL(weapon, location) = 0;
+    return NULL;
+  }
+  
+  if (GET_ACCESSORY_ATTACH_LOCATION(attachment) < ACCESS_ACCESSORY_LOCATION_TOP
+      || GET_ACCESSORY_ATTACH_LOCATION(attachment) > ACCESS_ACCESSORY_LOCATION_UNDER) {
+    if (ch)
+      send_to_char(ch, "Sorry, something went wrong. Staff have been notified.\r\n");
+    sprintf(buf, "SYSERR: Accessory attachment location %d out of range for '%s' (%ld).",
+            GET_ACCESSORY_ATTACH_LOCATION(attachment), GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment));
+    mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    return NULL;
+  }
+  
+  if (GET_ACCESSORY_TYPE(attachment) == ACCESS_GASVENT) {
+    if (ch) {
+      send_to_char(ch, "%s is permanently attached to %s and can't be removed.\r\n",
+                   GET_OBJ_NAME(attachment), GET_OBJ_NAME(weapon));
+      return NULL;
+    }
+   // We assume the coder knows what they're doing when unattaching a gasvent. They may proceed.
+  }
+  
+  // Remove the first (and only the first) affect of the attachment from the weapon.
+  if (attachment->affected[0].modifier != 0) {
+    bool successfully_modified = FALSE;
+    for (int index = 0; index < MAX_OBJ_AFFECT; index++) {
+      if (weapon->affected[index].location == attachment->affected[0].location
+          && weapon->affected[index].modifier == attachment->affected[0].modifier) {
+        weapon->affected[index].location = 0;
+        weapon->affected[index].modifier = 0;
+        successfully_modified = TRUE;
+        break;
+      }
+    }
+    
+    if (!successfully_modified) {
+      sprintf(buf, "WARNING: '%s' (%ld) unattached '%s' (%ld) from '%s' (%ld), but the gun was missing the attachment's affect. Something needs revising.",
+              ch ? GET_CHAR_NAME(ch) : "An automated process", ch ? GET_IDNUM(ch) : -1,
+              GET_OBJ_NAME(attachment), GET_OBJ_VNUM(attachment),
+              GET_OBJ_NAME(weapon), GET_OBJ_VNUM(weapon));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+    }
+  }
+  
+  // Subtract the attachment's weight from the weapon's weight.
+  weight_change_object(weapon, -GET_OBJ_WEIGHT(attachment));
+  
+  // Subtract the attachment's cost from the weapon's cost.
+  GET_OBJ_COST(weapon) = MAX(0, GET_OBJ_COST(weapon) - GET_OBJ_COST(attachment));
+  
+  // Update the weapon's aff flags.
+  weapon->obj_flags.bitvector.RemoveBit(AFF_LASER_SIGHT);
+  weapon->obj_flags.bitvector.RemoveBit(AFF_VISION_MAG_1);
+  weapon->obj_flags.bitvector.RemoveBit(AFF_VISION_MAG_2);
+  weapon->obj_flags.bitvector.RemoveBit(AFF_VISION_MAG_3);
+  
+  // Update the weapon's attach location to reflect this item.
+  GET_OBJ_VAL(weapon, GET_ACCESSORY_ATTACH_LOCATION(attachment) + 7) = 0;
+  
+  // Send the success message, assuming there's a character.
+  if (ch) {
+    act("You unattach $p from $P.", TRUE, ch, attachment, weapon, TO_CHAR);
+    act("$n unattaches $p from $P.", TRUE, ch, attachment, weapon, TO_ROOM);
+  }
+  
+  // Hand back our attachment object.
+  return attachment;
+}
+
+void copy_over_necessary_info(struct char_data *original, struct char_data *clone) {
+#define REPLICATE(field) ((clone)->field = (original)->field)
+  // Location data.
+  REPLICATE(in_room);
+  REPLICATE(was_in_room);
+  REPLICATE(in_veh);
+  
+  // PC specials (null for NPCs)
+  REPLICATE(player_specials);
+  
+  // Matrix info (null for NPCs)
+  REPLICATE(persona);
+  
+  // Spell info.
+  REPLICATE(squeue);
+  REPLICATE(sustained);
+  REPLICATE(ssust);
+  REPLICATE(spells);
+  
+  // Equipment info.
+  for (int pos = 0; pos < NUM_WEARS; pos++)
+    REPLICATE(equipment[pos]);
+  REPLICATE(carrying);
+  REPLICATE(cyberware);
+  REPLICATE(bioware);
+  
+  // Linked lists.
+  REPLICATE(next_in_room);
+  REPLICATE(next);
+  REPLICATE(next_fighting);
+  REPLICATE(next_in_zone);
+  REPLICATE(next_in_veh);
+  REPLICATE(next_watching);
+  
+  // Follower / master data.
+  REPLICATE(followers);
+  REPLICATE(master);
+  
+  // Pgroup data (null for NPCs)
+  REPLICATE(pgroup);
+  REPLICATE(pgroup_invitations);
+  
+  // Nested data (pointers from included structs)
+  REPLICATE(char_specials.fighting);
+  REPLICATE(char_specials.fight_veh);
+  REPLICATE(char_specials.hunting);
+  REPLICATE(mob_specials.last_direction);
+  REPLICATE(mob_specials.memory);
+  REPLICATE(mob_specials.wait_state);
+  REPLICATE(points.mental);
+  REPLICATE(points.max_mental);
+  REPLICATE(points.physical);
+  REPLICATE(points.max_physical);
+  REPLICATE(points.init_dice);
+  REPLICATE(points.init_roll);
+  REPLICATE(points.sustained[0]);
+  REPLICATE(points.sustained[1]);
+  REPLICATE(points.vision[0]);
+  REPLICATE(points.vision[1]);
+  REPLICATE(points.fire[0]);
+  REPLICATE(points.fire[1]);
+  REPLICATE(points.reach[0]);
+  REPLICATE(points.reach[1]);
+#undef REPLICATE
+}
+
+// Uses static, so don't use it more than once per call (to sprintf, etc)
+char *double_up_color_codes(const char *string) {
+  static char doubledbuf[MAX_STRING_LENGTH];
+  
+  // This will happen for night descs that haven't been set, etc.
+  if (!string)
+    return NULL;
+  
+  if (strlen(string) * 2 + 1 > sizeof(doubledbuf)) {
+    mudlog("SYSERR: Size of string passed to double_up_color_codes exceeds max size; aborting process.", NULL, LOG_SYSLOG, TRUE);
+    return NULL;
+  }
+  
+  
+  const char *read_ptr = string;
+  char *write_ptr = doubledbuf;
+  
+  while (*read_ptr) {
+    if (*read_ptr == '^')
+      *(write_ptr++) = '^';
+    *(write_ptr++) = *(read_ptr++);
+  }
+  *(write_ptr++) = '\0';
+  return doubledbuf;
+}
+
+// Wipes out all the various fiddly bits so we don't have to remember to do it every time.
+void clear_editing_data(struct descriptor_data *d) {
+  // This is distinct from free_editing_structs()! That one purges out memory, this just unsets flags.
+  d->edit_number = 0;
+  PLR_FLAGS(d->character).RemoveBit(PLR_EDITING);
+  d->edit_convert_color_codes = FALSE;
+  
+  // We're setting things to NULL here. If you don't want to leak memory, clean it up beforehand.
+  d->edit_room = NULL;
+}
+
+// Sets a character's skill, with bounds. Assumes that you've already deducted the appropriate cost.
+void set_character_skill(struct char_data *ch, int skill_num, int new_value, bool send_message) {
+  char msgbuf[500];
+  
+  if (!ch) {
+    mudlog("SYSERR: NULL character passed to set_character_skill.", ch, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  if (IS_NPC(ch)) {
+    mudlog("SYSERR: NPC passed to set_character_skill.", ch, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  if (skill_num < SKILL_ATHLETICS || skill_num >= MAX_SKILLS) {
+    sprintf(msgbuf, "SYSERR: Invalid skill number %d passed to set_character_skill.", skill_num);
+    mudlog(msgbuf, ch, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  if (new_value < 0 || (!access_level(ch, LVL_BUILDER) && new_value > MAX_SKILL_LEVEL_FOR_MORTS)) {
+    sprintf(msgbuf, "SYSERR: Attempting to assign skill level %d to %s, which exceeds range 0 <= x <= %d.",
+            new_value, GET_CHAR_NAME(ch), access_level(ch, LVL_BUILDER) ? MAX_SKILL_LEVEL_FOR_IMMS : MAX_SKILL_LEVEL_FOR_MORTS);
+    mudlog(msgbuf, ch, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  if (new_value == REAL_SKILL(ch, skill_num)) {
+    // This is not an error condition (think restoring an imm and skillsetting everything); just silently fail.
+    return;
+  }
+  
+  if (send_message) {    
+    // Active skill messaging.
+    if (skills[skill_num].type == SKILL_TYPE_ACTIVE) {
+      if (new_value == 1) {
+        send_to_char(ch, "^cYou have been introduced to the basics.^n\r\n");
+      } else if (new_value == 2) {
+        send_to_char(ch, "^cYou have gotten in some practice.^n\r\n");
+      } else if (new_value == 3) {
+        send_to_char(ch, "^cYou have attained average proficiency.^n\r\n");
+      } else if (new_value == 4) {
+        send_to_char(ch, "^CYour skills are now above average.^n\r\n");
+      } else if (new_value == 5) {
+        send_to_char(ch, "^CYou are considered a professional at %s.^n\r\n", skills[skill_num].name);
+      } else if (new_value == 6) {
+        send_to_char(ch, "^gYou've practiced so much that you can act without thinking about it.^n\r\n");
+      } else if (new_value == 7) {
+        send_to_char(ch, "^gYou are considered an expert in your field.^n\r\n");
+      } else if (new_value == 8) {
+        send_to_char(ch, "^GYour talents at %s are considered world-class.^n\r\n", skills[skill_num].name);
+      } else {
+        send_to_char(ch, "^GYou further hone your talents towards perfection.^n\r\n");
+      }
+    }
+    // Knowledge skill messaging.
+    else {
+      if (new_value == 1) {
+        send_to_char(ch, "^cYou've picked up a few things.^n\r\n");
+      } else if (new_value == 2) {
+        send_to_char(ch, "^cYou've developed an interest in %s.^n\r\n", skills[skill_num].name);
+      } else if (new_value == 3) {
+        send_to_char(ch, "^cYou have a dedicated knowledge of that area.^n\r\n");
+      } else if (new_value == 4) {
+        send_to_char(ch, "^CYou are well-rounded in the field of %s.^n\r\n", skills[skill_num].name);
+      } else if (new_value == 5) {
+        send_to_char(ch, "^CYou could earn a degree in %s.^n\r\n", skills[skill_num].name);
+      } else if (new_value == 6) {
+        send_to_char(ch, "^gYou have mastered the field of %s.^n\r\n", skills[skill_num].name);
+      } else if (new_value == 7) {
+        send_to_char(ch, "^gYou are considered an expert in your field.^n\r\n");
+      } else if (new_value == 8) {
+        send_to_char(ch, "^GYour knowledge of %s is genius-level.^n\r\n", skills[skill_num].name);
+      } else {
+        send_to_char(ch, "^GYou further hone your knowledge towards perfection.^n\r\n");
+      }
+     }
+  }
+  
+  // Update their skill.
+  (ch)->char_specials.saved.skills[skill_num][0] = new_value;
+  
+  // Set the dirty bit so we know we need to save their skills.
+  GET_SKILL_DIRTY_BIT((ch)) = TRUE;
+}
+
+// Per SR3 core p98-99.
+const char *skill_rank_name(int rank, bool knowledge) {
+#define RANK_MESSAGE(value, active_name, knowledge_name) { \
+    if (rank == value) { \
+      if (knowledge) return knowledge_name; \
+      else return active_name; \
+   } \
+}
+  
+  if (rank < 0)
+    return "uh oh! you have a negative skill, please report!";
+  
+  RANK_MESSAGE(0, "not learned", "not learned");
+  RANK_MESSAGE(1, "introduced", "scream-sheet level");
+  RANK_MESSAGE(2, "practiced", "interested");
+  RANK_MESSAGE(3, "proficient", "dedicated");
+  RANK_MESSAGE(4, "skilled", "well-rounded");
+  RANK_MESSAGE(5, "professional", "educated");
+  RANK_MESSAGE(6, "innate", "mastered");
+  RANK_MESSAGE(7, "expert", "expert");
+  
+  if (rank < MAX_SKILL_LEVEL_FOR_IMMS) {
+    if (knowledge) return "genius";
+    else return "world-class";
+  }
+  
+  return "godly";
+#undef RANK_MESSAGE
+}
+
+char *how_good(int skill, int rank)
+{
+  static char buf[256];
+  sprintf(buf, " (%s)", skill_rank_name(rank, skills[skill].type == SKILL_TYPE_KNOWLEDGE));
+  return buf;
 }

@@ -80,8 +80,8 @@ teach_t teachers[] = {
     "After what feels like seven years of magical study, you feel like you've learned something.\r\n", GODLY },
   
   // Newbie magic teacher
-  { 60501, { SKILL_CONJURING, SKILL_SORCERY, SKILL_SPELLDESIGN,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  { 60501, { SKILL_CONJURING, SKILL_SORCERY, SKILL_SPELLDESIGN, SKILL_AURA_READING,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
     "After hours of study and practice, you feel like you've learned something.\r\n", NEWBIE },
   
   { 60502, { SKILL_COMPUTER, SKILL_BR_COMPUTER, SKILL_DATA_BROKERAGE, SKILL_CYBERTERM_DESIGN, SKILL_ELECTRONICS, SKILL_BR_ELECTRONICS,
@@ -97,11 +97,19 @@ teach_t teachers[] = {
     SKILL_BR_DRONE, SKILL_BR_CAR, SKILL_BR_TRUCK, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
     "After hours of study and practice, you feel like you've learned something.\r\n", NEWBIE },
   
-  { 60505, { SKILL_CLUBS, SKILL_CYBER_IMPLANTS, SKILL_EDGED_WEAPONS, SKILL_POLE_ARMS, SKILL_UNARMED_COMBAT, SKILL_WHIPS_FLAILS,
+  { 60505, { SKILL_CLUBS, SKILL_CYBER_IMPLANTS, SKILL_EDGED_WEAPONS, SKILL_POLE_ARMS, SKILL_UNARMED_COMBAT, SKILL_WHIPS_FLAILS, // Jet Li
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
     "After hours of study and practice, you feel like you've learned something.\r\n", NEWBIE },
   
-  { 60506, { SKILL_ASSAULT_RIFLES, SKILL_GUNNERY, SKILL_MACHINE_GUNS, SKILL_PISTOLS, SKILL_RIFLES, SKILL_SHOTGUNS, SKILL_SMG,
+  { 60539, { SKILL_PROJECTILES, SKILL_THROWING_WEAPONS, // Kyle the Mall Ninja
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    "Kyle teaches you things you're pretty sure were more effective in the late 1800s.\r\n", NEWBIE },
+  
+  { 60540, { SKILL_BR_PISTOL, SKILL_BR_SHOTGUN, SKILL_BR_RIFLE, SKILL_BR_HEAVYWEAPON, SKILL_BR_SMG, // Jean Samuel Pauly
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    "Jean walks you through the intricacies of handloading.\r\n", NEWBIE },
+  
+  { 60506, { SKILL_ASSAULT_RIFLES, SKILL_GUNNERY, SKILL_MACHINE_GUNS, SKILL_PISTOLS, SKILL_RIFLES, SKILL_SHOTGUNS, SKILL_SMG, // Mick
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
     "After hours of study and practice, you feel like you've learned something.\r\n", NEWBIE },
   
@@ -440,6 +448,7 @@ void assign_mobiles(void)
   SPECIAL(matchsticks);
   SPECIAL(painter);
   SPECIAL(multnomah_guard);
+  SPECIAL(nerp_skills_teacher);
 
   /* trainers */
   for (i = 0; trainers[i].vnum != 0; i++)
@@ -448,6 +457,8 @@ void assign_mobiles(void)
   /* teachers */
   for (i = 0; teachers[i].vnum != 0; i++)
     ASSIGNMOB(teachers[i].vnum, teacher);
+  
+  ASSIGNMOB(60541, nerp_skills_teacher);
 
   /* metamagic trainers */
   for (i = 0; metamagict[i].vnum != 0; i++)
@@ -595,6 +606,7 @@ void assign_objects(void)
   SPECIAL(portable_gridguide);
   SPECIAL(pocket_sec);
   SPECIAL(locker);
+  SPECIAL(chargen_hopper);
 
   ASSIGNOBJ(3, gen_board);  /* Rift's Board */
   ASSIGNOBJ(4, gen_board);  /* Pook's Board */
@@ -669,6 +681,7 @@ void assign_objects(void)
   ASSIGNOBJ(31542, pocket_sec);
   ASSIGNOBJ(39865, pocket_sec); */
   ASSIGNOBJ(9826, locker);
+  ASSIGNOBJ(60500, chargen_hopper);
   WSPEC(monowhip);
 
   ASSIGNWEAPON(660, monowhip);
@@ -701,6 +714,8 @@ void assign_rooms(void)
   SPECIAL(chargen_skill_annex);
   SPECIAL(chargen_unpractice_skill);
   SPECIAL(floor_has_glass_shards);
+  SPECIAL(chargen_career_archetype_paths);
+  SPECIAL(chargen_spirit_combat_west);
 
   /* Limbo/God Rooms */
   ASSIGNROOM(8, oceansounds);
@@ -714,6 +729,8 @@ void assign_rooms(void)
   ASSIGNROOM(60505, chargen_south_from_trainer);
   ASSIGNROOM(60506, chargen_skill_annex);
   ASSIGNROOM(60562, auth_room);
+  ASSIGNROOM(60514, chargen_career_archetype_paths);
+  ASSIGNROOM(60594, chargen_spirit_combat_west);
   /* CharGen - allow forgetting skills */
   ASSIGNROOM(60507, chargen_unpractice_skill);
   ASSIGNROOM(60508, chargen_unpractice_skill);
@@ -725,6 +742,9 @@ void assign_rooms(void)
   ASSIGNROOM(60591, chargen_unpractice_skill);
   ASSIGNROOM(60592, chargen_unpractice_skill);
   ASSIGNROOM(60593, chargen_unpractice_skill);
+  ASSIGNROOM(60626, chargen_unpractice_skill);
+  ASSIGNROOM(60627, chargen_unpractice_skill);
+  ASSIGNROOM(60628, chargen_unpractice_skill);
   
   /* Neophyte Guild */
   ASSIGNROOM(60585, neophyte_entrance);

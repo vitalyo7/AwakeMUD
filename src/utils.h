@@ -77,6 +77,17 @@ struct  obj_data *get_mount_manned_by_ch(struct char_data *ch);
 void    terminate_mud_process_with_message(const char *message, int error_code);
 bool    char_can_make_noise(struct char_data *ch, const char *message = NULL);
 struct  char_data *get_driver(struct veh_data *veh);
+struct  obj_data *find_matching_obj_in_container(struct obj_data *container, vnum_t vnum);
+bool    attach_attachment_to_weapon(struct obj_data *attachment, struct obj_data *weapon, struct char_data *ch);
+struct  obj_data *unattach_attachment_from_weapon(int location, struct obj_data *weapon, struct char_data *ch);
+void    copy_over_necessary_info(struct char_data *original, struct char_data *clone);
+void    clear_editing_data(struct descriptor_data *d);
+char    *double_up_color_codes(const char *string);
+
+// Skill-related.
+char *how_good(int skill, int rank);
+const char *skill_rank_name(int rank, bool knowledge);
+void set_character_skill(struct char_data *ch, int skill_num, int new_value, bool send_message);
 
 // Message history management and manipulation.
 void    store_message_to_history(struct descriptor_data *d, int channel, const char *mallocd_message);
@@ -297,7 +308,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 
 #define GET_WAS_IN(ch)  ((ch)->was_in_room)
 
-#define GET_VEH_NAME(veh) ((veh)->restring ? (veh)->restring : (veh)->short_description)
+#define GET_VEH_NAME(veh) (decapitalize_a_an((veh)->restring ? (veh)->restring : (veh)->short_description))
 #define GET_VEH_DESC(veh) ((veh)->restring_long ? (veh)->restring_long : (veh)->long_description)
 #define GET_OBJ_NAME(obj) ((obj)->restring ? (obj)->restring : (obj)->text.name)
 #define GET_OBJ_DESC(obj) ((obj)->photo ? (obj)->photo : (obj)->text.look_desc)
@@ -319,6 +330,8 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define GET_REAL_LEVEL(ch) \
    (ch->desc && ch->desc->original ? GET_LEVEL(ch->desc->original) : \
     GET_LEVEL(ch))
+
+#define GET_DESC_LEVEL(d)  ((d)->original ? GET_LEVEL((d)->original) : ((d)->character ? GET_LEVEL((d)->character) : 0))
 
 #define GET_RACE(ch)          ((ch)->player.race)
 #define GET_TRADITION(ch)       ((ch)->player.tradition)
@@ -465,6 +478,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
  * the skills.  Sure love corrupting the p-file! -Flynn */
 #define GET_SKILL(ch, i)        ((ch)->char_specials.saved.skills[i][1] > 0 ? (ch)->char_specials.saved.skills[i][1] : (ch)->char_specials.saved.skills[i][0])
 #define REAL_SKILL(ch, i)       ((ch)->char_specials.saved.skills[i][1] > 0 ? 0 : (ch)->char_specials.saved.skills[i][0])
+// SET_SKILL is used only in medit.cpp for NPCs. Set char skills with utils.cpp's set_character_skill().
 #define SET_SKILL(ch, i, pct)   {(ch)->char_specials.saved.skills[i][0] = pct; GET_SKILL_DIRTY_BIT((ch)) = TRUE;}
 #define GET_POWER(ch, i)	((ch)->char_specials.saved.powers[i][1] ? \
                                  MIN((ch)->char_specials.saved.powers[i][1], (ch)->char_specials.saved.powers[i][0]) : 0)
@@ -724,12 +738,21 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 // ITEM_LIGHT convenience defines
 
 // ITEM_WORKSHOP convenience defines
-#define GET_WORKSHOP_TYPE(workshop)            (GET_OBJ_VAL(workshop, 0))
-#define GET_WORKSHOP_GRADE(workshop)           (GET_OBJ_VAL(workshop, 1))
-#define GET_WORKSHOP_IS_SETUP(workshop)        (GET_OBJ_VAL(workshop, 2))
-#define GET_WORKSHOP_UNPACK_TICKS(workshop)    (GET_OBJ_VAL(workshop, 3))
+#define GET_WORKSHOP_TYPE(workshop)            (GET_OBJ_VAL((workshop), 0))
+#define GET_WORKSHOP_GRADE(workshop)           (GET_OBJ_VAL((workshop), 1))
+#define GET_WORKSHOP_IS_SETUP(workshop)        (GET_OBJ_VAL((workshop), 2))
+#define GET_WORKSHOP_UNPACK_TICKS(workshop)    (GET_OBJ_VAL((workshop), 3))
 
 // ITEM_CAMERA convenience defines
+
+// ITEM_PART convenience defines
+#define GET_PART_TYPE(part)                    (GET_OBJ_VAL((part), 0))
+#define GET_PART_RATING(part)                  (GET_OBJ_VAL((part), 1))
+#define GET_PART_TARGET_MPCP(part)             (GET_OBJ_VAL((part), 2))
+#define GET_PART_DESIGN_COMPLETION(part)       (GET_OBJ_VAL((part), 3)) //0 = done, -1 = required ?
+#define GET_PART_BUILDER_IDNUM(part)           (GET_OBJ_VAL((part), 7))
+#define GET_PART_PART_COST(part)               (GET_OBJ_VAL((part), 8))
+#define GET_PART_CHIP_COST(part)               (GET_OBJ_VAL((part), 9))
 
 // ITEM_WEAPON convenience defines
 #define GET_WEAPON_POWER(weapon)               (GET_OBJ_VAL((weapon), 0))
@@ -745,12 +768,16 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define GET_WEAPON_POSSIBLE_FIREMODES(weapon)  (GET_OBJ_VAL((weapon), 10))
 #define GET_WEAPON_FIREMODE(weapon)            (GET_OBJ_VAL((weapon), 11))
 #define GET_WEAPON_FULL_AUTO_COUNT(weapon)     (GET_OBJ_TIMER((weapon)))
+#define GET_WEAPON_ATTACH_LOC(weapon, loc)     (((loc) >= ACCESS_LOCATION_TOP && (loc) <= ACCESS_LOCATION_UNDER) ? \
+                                                    GET_OBJ_VAL((weapon), (loc)) : 0)
 
-#define WEAPON_CAN_USE_FIREMODE(weapon, mode)  (IS_SET(GET_WEAPON_POSSIBLE_FIREMODES(weapon), 1 << mode))
+#define WEAPON_CAN_USE_FIREMODE(weapon, mode)  (IS_SET(GET_WEAPON_POSSIBLE_FIREMODES(weapon), 1 << (mode)))
 
 // ITEM_FIREWEAPON convenience defines
 
 // ITEM_MISSILE convenience defines
+
+// ITEM_CUSTOM_DECK convenience defines
 
 // ITEM_GYRO convenience defines
 
@@ -760,7 +787,11 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 
 // ITEM_OTHER convenience defines
 
+// ITEM_MAGIC_TOOL convenience defines
+
 // ITEM_DOCWAGON convenience defines
+#define GET_DOCWAGON_CONTRACT_GRADE(modulator) (GET_OBJ_VAL((modulator), 0))
+#define GET_DOCWAGON_BONDED_IDNUM(modulator)   (GET_OBJ_VAL((modulator), 1))
 
 // ITEM_CONTAINER convenience defines
 
@@ -794,10 +825,18 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define GET_CYBERDECK_IO_RATING(deck)         (GET_OBJ_VAL((deck), 4))
 #define GET_CYBERDECK_USED_STORAGE(deck)      (GET_OBJ_VAL((deck), 5))
 #define GET_CYBERDECK_RESPONSE_INCREASE(deck) (GET_OBJ_VAL((deck), 6))
-#define GET_CYBERDECK_COMPLETE_STATUS(deck)   (GET_OBJ_VAL((deck), 9))
+#define GET_CYBERDECK_IS_INCOMPLETE(deck)     (GET_OBJ_VAL((deck), 9))
 #define GET_CYBERDECK_FREE_STORAGE(deck)      (GET_CYBERDECK_TOTAL_STORAGE((deck)) -GET_CYBERDECK_USED_STORAGE((deck)))
 
 // ITEM_PROGRAM convenience defines
+
+// ITEM_GUN_MAGAZINE convenience defines
+
+// ITEM_GUN_ACCESSORY convenience defines
+#define GET_ACCESSORY_ATTACH_LOCATION(accessory) (GET_OBJ_VAL((accessory), 0))
+#define GET_ACCESSORY_TYPE(accessory)            (GET_OBJ_VAL((accessory), 1))
+
+// ITEM_SPELL_FORMULA convenience defines
 
 // ITEM_FOCUS convenience defines
 
@@ -806,6 +845,8 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 // ITEM_CLIMBING convenience defines
 
 // ITEM_QUIVER convenience defines
+
+// ITEM_DECK_ACCESSORY convenience defines
 
 // ITEM_RCDECK convenience defines
 
@@ -816,10 +857,21 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 
 // ITEM_HOLSTER convenience defines
 
+// ITEM_DESIGN convenience defines
+
+// ITEM_QUEST convenience defines
+
+// ITEM_GUN_AMMO convenience defines
+
+// ITEM_KEYRING convenience defines
+
 
 /* Misc utils ************************************************************/
 #define IS_DAMTYPE_PHYSICAL(type) \
   !((type) == TYPE_HIT || (type) == TYPE_BLUDGEON || (type) == TYPE_PUNCH || (type) == TYPE_TASER || (type) == TYPE_CRUSH || (type) == TYPE_POUND)
+
+// If d->edit_convert_color_codes is true, doubles up ^ marks to not print color codes to the user in the specified string. Uses a static buf, so only one invocation per sprintf()!
+#define DOUBLE_UP_COLOR_CODES_IF_NEEDED(str) (d ? (d->edit_convert_color_codes ? double_up_color_codes((str)) : (str)) : (str))
 
 /*
  * Some systems such as Sun's don't have prototyping in their header files.

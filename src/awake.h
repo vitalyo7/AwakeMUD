@@ -272,10 +272,11 @@ enum {
 #define PLR_AUTH                32 /* Player needs Auth */
 #define PLR_EDCON               33
 #define PLR_REMOTE              34
-#define PLR_INITIATE		35
-#define PLR_DRIVEBY  36
-#define PLR_RPE   37
-#define PLR_MAX                 38
+#define PLR_INITIATE		        35
+#define PLR_DRIVEBY             36
+#define PLR_RPE                 37
+#define PLR_NO_IDLE_OUT         38 /* Player will not idle out (morts- for test chars) */
+#define PLR_MAX                 39
 
 
 
@@ -764,7 +765,7 @@ enum {
 #define SKILL_TRACK                 58
 #define SKILL_CLIMBING            59 
 #define SKILL_PILOT_BIKE    60
-#define SKILL_PILOT_FIXED_WING   61
+#define SKILL_UNUSED_WAS_PILOT_FIXED_WING   61
 #define SKILL_PILOT_CAR     62
 #define SKILL_PILOT_TRUCK   63
 #define SKILL_BR_BIKE     64
@@ -1499,6 +1500,11 @@ enum {
 #define ACCESS_LOCATION_BARREL 8
 #define ACCESS_LOCATION_UNDER  9
 
+// Accessory value 0
+#define ACCESS_ACCESSORY_LOCATION_TOP    0
+#define ACCESS_ACCESSORY_LOCATION_BARREL 1
+#define ACCESS_ACCESSORY_LOCATION_UNDER  2
+
 #define RECOIL_COMP_VALUE_BIPOD   2
 #define RECOIL_COMP_VALUE_TRIPOD  6
 
@@ -1626,6 +1632,7 @@ enum {
 #define SCMD_INITIATE   7
 #define SCMD_RPE 	8
 #define SCMD_POWERPOINT 9
+#define SCMD_AUTHORIZE  10
 
 /* do_say */
 #define SCMD_SAY        0
@@ -1833,6 +1840,7 @@ enum {
 #define CON_AMMO_CREATE  44
 #define CON_ASKNAME      45            /* Ask user for name            */
 #define CON_PGEDIT       46
+#define CON_HELPEDIT     47
 
 #define PO_RACE		0
 #define PO_ATTR		1
@@ -1957,7 +1965,7 @@ enum {
 #define PULSE_VIOLENCE            (3 RL_SEC)
 #define PULSE_MONORAIL            (5 RL_SEC)
 
-#define MAX_SOCK_BUF              (12 * 1024) /* Size of kernel's sock buf   */
+#define MAX_SOCK_BUF              (22 * 1024) /* Size of kernel's sock buf   */ // was 12 * 1024, increased arbitrarily
 #define MAX_PROMPT_LENGTH         96          /* Max length of prompt        */
 #define GARBAGE_SPACE             32
 #define SMALL_BUFSIZE             1024
@@ -2014,6 +2022,13 @@ enum {
 #define RM_MULTNOMAH_GATE_NORTH     1
 #define RM_MULTNOMAH_GATE_SOUTH     1
 
+// Chargen room defines
+#define RM_CHARGEN_PATH_OF_THE_MAGICIAN_SHAMANIC  60520
+#define RM_CHARGEN_PATH_OF_THE_MAGICIAN_HERMETIC  60623
+#define RM_CHARGEN_PATH_OF_THE_ADEPT              60518
+#define RM_CHARGEN_CONJURING_HERMETIC             60522
+#define RM_CHARGEN_CONJURING_SHAMANIC             60625
+
 #define RM_JUNKYARD_GATES           70501
 #define RM_JUNKYARD_PARTS           70502
 #define RM_JUNKYARD_GLASS           70504
@@ -2030,6 +2045,9 @@ enum {
 #define OBJ_MAP_OF_SEATTLE         2041
 #define OBJ_ELEVATOR_SHAFT_KEY     998
 #define OBJ_BLANK_PHOTO            109
+#define OBJ_BLANK_PART_DESIGN      112
+#define OBJ_CUSTOM_CYBERDECK_SHELL 113
+#define OBJ_DOCWAGON_BASIC_MOD     601
 
 /* ban struct */
 struct ban_list_element
@@ -2049,6 +2067,8 @@ struct ban_list_element
 #define NEWBIE_SKILL    6
 #define NORMAL_MAX_SKILL  8
 #define LEARNED_LEVEL    12
+#define MAX_SKILL_LEVEL_FOR_MORTS  LEARNED_LEVEL
+#define MAX_SKILL_LEVEL_FOR_IMMS   100
 #define RENT_FACTOR 1
 
 // Definitions for message history.

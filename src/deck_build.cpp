@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "structs.h"
 #include "awake.h"
 #include "db.h"
@@ -9,7 +11,7 @@
 #include "constants.h"
 #include "olc.h"
 #include "newmagic.h"
-#include <stdlib.h>
+#include "newmatrix.h"
 
 #define CH d->character
 #define PART d->edit_obj
@@ -20,6 +22,27 @@
 #define DEDIT_RATING 4
 
 extern void ammo_build(struct char_data *ch, struct obj_data *obj);
+
+bool part_can_have_its_rating_set(struct obj_data *part) {
+  switch (GET_PART_TYPE(part)) {
+    case PART_RESPONSE:
+    case PART_HARDENING:
+    case PART_STORAGE:
+    case PART_ACTIVE:
+    case PART_ICON:
+    case PART_BOD:
+    case PART_SENSOR:
+    case PART_MASKING:
+    case PART_EVASION:
+    case PART_RADIO:
+    case PART_CELLULAR:
+    case PART_SATELLITE:
+    case PART_IO:
+      return TRUE;
+    default:
+      return FALSE;
+  }
+}
 
 int get_part_cost(int type, int rating, int mpcp) {
     switch (type) {
@@ -95,46 +118,39 @@ int get_chip_cost(int type, int rating, int mpcp) {
     return 0;
 }
 
+// Enforce certain restrictions on values in parts. Why it was done here instead of in the setter logic is anyone's guess.
+void enforce_restrictions(struct obj_data *part) {
+  if (GET_PART_TYPE(part) == PART_RESPONSE)
+    GET_PART_TARGET_MPCP(part) = MAX(3, GET_PART_TARGET_MPCP(part));
+}
+
 void partbuild_main_menu(struct descriptor_data *d) {
-    CLS(CH);
-    send_to_char(CH, "1) Name: ^c%-40s^n     Software Needed: ^c%s^n\r\n",
-                 PART->restring, YESNO(parts[GET_OBJ_VAL(PART, 0)].software));
-    send_to_char(CH, "2) Type: ^c%-40s^n     Parts Cost: ^c%d nuyen^n\r\n",
-                 parts[GET_OBJ_VAL(PART, 0)].name, get_part_cost(GET_OBJ_VAL(PART, 0), GET_OBJ_VAL(PART, 1), GET_OBJ_VAL(PART, 2)));
-    send_to_char(CH, "3) MPCP Designed For: ^c%-30d^n  Chips Cost: ^c%d nuyen^n\r\n",
-                 GET_OBJ_VAL(PART, 2),
-                 get_chip_cost(GET_OBJ_VAL(PART, 0), GET_OBJ_VAL(PART, 1), GET_OBJ_VAL(PART, 2)));
-    if (GET_OBJ_VAL(PART, 2))
-        switch (GET_OBJ_VAL(PART, 0)) {
-        case PART_RESPONSE:
-            if (GET_OBJ_VAL(PART, 2) < 3)
-                GET_OBJ_VAL(PART, 2) = 3;
-            // fall through
-        case PART_HARDENING:
-        case PART_STORAGE:
-        case PART_ACTIVE:
-        case PART_ICON:
-        case PART_BOD:
-        case PART_SENSOR:
-        case PART_MASKING:
-        case PART_EVASION:
-        case PART_RADIO:
-        case PART_CELLULAR:
-        case PART_SATELLITE:
-        case PART_IO:
-            send_to_char(CH, "4) Rating: ^c%d^n\r\n", GET_OBJ_VAL(PART, 1));
-        }
-    send_to_char(CH, "q) Save and Quit\r\n");
-    send_to_char(CH, "Enter Option: ");
-    d->edit_mode = DEDIT_MAIN;
+  CLS(CH);
+  enforce_restrictions(PART);
+  
+  send_to_char(CH, "1) Name: ^c%-40s^n     Software Needed: ^c%s^n\r\n",
+               PART->restring, YESNO(parts[GET_PART_TYPE(PART)].software));
+  send_to_char(CH, "2) Type: ^c%-40s^n     Parts Cost: ^c%d nuyen^n\r\n",
+               parts[GET_PART_TYPE(PART)].name, get_part_cost(GET_PART_TYPE(PART), GET_PART_RATING(PART), GET_PART_TARGET_MPCP(PART)));
+  send_to_char(CH, "3) MPCP Designed For: ^c%-30d^n  Chips Cost: ^c%d nuyen^n\r\n",
+               GET_PART_TARGET_MPCP(PART),
+               get_chip_cost(GET_PART_TYPE(PART), GET_PART_RATING(PART), GET_PART_TARGET_MPCP(PART)));
+  if (GET_PART_TARGET_MPCP(PART) && part_can_have_its_rating_set(PART))
+    send_to_char(CH, "4) Rating: ^c%d^n\r\n", GET_PART_RATING(PART));
+  send_to_char(CH, "q) Save and Quit\r\n");
+  send_to_char(CH, "Enter Option: ");
+  d->edit_mode = DEDIT_MAIN;
 }
 
 void partbuild_disp_types(struct descriptor_data *d) {
-    CLS(CH);
-    for (int x = 1; x < NUM_PARTS; x += 2)
-        send_to_char(CH, "%2d) %-28s %2d) %s\r\n", x, parts[x].name, x+1, x+1 < NUM_PARTS ? parts[x+1].name : " ");
-    send_to_char(CH, "Enter Part Number: ");
-    d->edit_mode = DEDIT_TYPE;
+  CLS(CH);
+  int x = 1;
+  for (; x < NUM_PARTS - 1; x += 2)
+    send_to_char(CH, "%2d) %-28s%s%2d) %s\r\n", x, parts[x].name, D_PRF_FLAGGED(d, PRF_SCREENREADER) ? "\r\n\r\n" : "  ", x+1, parts[x+1].name);
+  if (x < NUM_PARTS)
+    send_to_char(CH, "%2d) %-28s\r\n\r\n", x, parts[x].name);
+  send_to_char(CH, "Enter Part Number: ");
+  d->edit_mode = DEDIT_TYPE;
 }
 
 void pbuild_parse(struct descriptor_data *d, const char *arg) {
@@ -150,8 +166,8 @@ void pbuild_parse(struct descriptor_data *d, const char *arg) {
             partbuild_disp_types(d);
             break;
         case '3':
-            if (parts[GET_OBJ_VAL(PART, 0)].design >= 0 ||
-                    GET_OBJ_VAL(PART, 0) == PART_ACTIVE || GET_OBJ_VAL(PART, 0) == PART_STORAGE || GET_OBJ_VAL(PART, 0) == PART_MATRIX_INTERFACE) {
+            if (parts[GET_PART_TYPE(PART)].design >= 0 ||
+                    GET_PART_TYPE(PART) == PART_ACTIVE || GET_PART_TYPE(PART) == PART_STORAGE || GET_PART_TYPE(PART) == PART_MATRIX_INTERFACE) {
                 send_to_char(CH, "MPCP of Target Deck: ");
                 d->edit_mode = DEDIT_MPCP;
             } else
@@ -159,22 +175,22 @@ void pbuild_parse(struct descriptor_data *d, const char *arg) {
             break;
         case 'q':
         case 'Q':
-            GET_OBJ_VAL(PART, 9) = get_chip_cost(GET_OBJ_VAL(PART, 0), GET_OBJ_VAL(PART, 1), GET_OBJ_VAL(PART, 2));
-            GET_OBJ_VAL(PART, 8) = get_part_cost(GET_OBJ_VAL(PART, 0), GET_OBJ_VAL(PART, 1), GET_OBJ_VAL(PART, 2));
-            if (parts[GET_OBJ_VAL(PART, 0)].design == -1)
+            GET_PART_CHIP_COST(PART) = get_chip_cost(GET_PART_TYPE(PART), GET_PART_RATING(PART), GET_PART_TARGET_MPCP(PART));
+            GET_PART_PART_COST(PART) = get_part_cost(GET_PART_TYPE(PART), GET_PART_RATING(PART), GET_PART_TARGET_MPCP(PART));
+            if (parts[GET_PART_TYPE(PART)].design == -1)
                 GET_OBJ_VAL(PART, 3) = 0;
             else
                 GET_OBJ_VAL(PART, 3) = -1;
             GET_OBJ_VAL(PART, 4) = -1;
-            if (!GET_OBJ_VAL(PART, 1))
-                GET_OBJ_VAL(PART, 1) = GET_OBJ_VAL(PART, 2);
+            if (!GET_PART_RATING(PART))
+                GET_PART_RATING(PART) = GET_PART_TARGET_MPCP(PART);
             obj_to_char(PART, CH);
             PART = NULL;
             STATE(d) = CON_PLAYING;
             send_to_char(CH, "Design Saved!\r\n");
             break;
         case '4':
-            if (GET_OBJ_VAL(PART, 2)) {
+            if (part_can_have_its_rating_set(PART)) {
                 send_to_char(CH, "Rating of Part: ");
                 d->edit_mode = DEDIT_RATING;
                 break;
@@ -187,29 +203,29 @@ void pbuild_parse(struct descriptor_data *d, const char *arg) {
         }
         break;
     case DEDIT_RATING:
-        switch (GET_OBJ_VAL(PART, 0)) {
+        switch (GET_PART_TYPE(PART)) {
         case PART_IO:
-            if (number < 1 || number > GET_OBJ_VAL(PART, 2) * 100) {
-                send_to_char(CH, "I/O must be between 1 and %d. Enter Speed of I/O: ", GET_OBJ_VAL(PART, 2) * 100);
+            if (number < 1 || number > GET_PART_TARGET_MPCP(PART) * 100) {
+                send_to_char(CH, "I/O must be between 1 and %d. Enter Speed of I/O: ", GET_PART_TARGET_MPCP(PART) * 100);
                 return;
             }
             break;
         case PART_STORAGE:
-            if (number < 1 || number > GET_OBJ_VAL(PART, 2) * 600) {
-                send_to_char(CH, "Memory must be between 1 and %d. Enter Amount of Memory: ", GET_OBJ_VAL(PART, 2) * 600);
+            if (number < 1 || number > GET_PART_TARGET_MPCP(PART) * 600) {
+                send_to_char(CH, "Memory must be between 1 and %d. Enter Amount of Memory: ", GET_PART_TARGET_MPCP(PART) * 600);
                 return;
             }
             break;
         case PART_ACTIVE:
-            if (number < 1 || number > GET_OBJ_VAL(PART, 2) * 250) {
-                send_to_char(CH, "Memory must be between 1 and %d. Enter Amount of Memory: ", GET_OBJ_VAL(PART, 2) * 250);
+            if (number < 1 || number > GET_PART_TARGET_MPCP(PART) * 250) {
+                send_to_char(CH, "Memory must be between 1 and %d. Enter Amount of Memory: ", GET_PART_TARGET_MPCP(PART) * 250);
                 return;
             }
             break;
         case PART_RESPONSE:
-            if (number < 0 || number > MIN(3, (int)(GET_OBJ_VAL(PART, 2) / 4))) {
+            if (number < 0 || number > MIN(3, (int)(GET_PART_TARGET_MPCP(PART) / 4))) {
                 send_to_char(CH, "Response Increase must be between 1 and %d. Enter Response Increase: ",
-                             MIN(3, (int)(GET_OBJ_VAL(PART, 2) / 4)));
+                             MIN(3, (int)(GET_PART_TARGET_MPCP(PART) / 4)));
                 return;
             }
             break;
@@ -222,36 +238,37 @@ void pbuild_parse(struct descriptor_data *d, const char *arg) {
         case PART_RADIO:
         case PART_CELLULAR:
         case PART_SATELLITE:
-            if (number < 1 || number > GET_OBJ_VAL(PART, 2)) {
-                send_to_char(CH, "Part ratings cannot exceed MPCP of the target deck. Enter Rating: ");
+            if (number < 1 || number > GET_PART_TARGET_MPCP(PART)) {
+                send_to_char(CH, "Part ratings must be between 1 and the MPCP of the target deck (%d). Enter Rating: ", GET_PART_TARGET_MPCP(PART));
                 return;
             }
             break;
         }
-        GET_OBJ_VAL(PART, 1) = number;
+        GET_PART_RATING(PART) = number;
         partbuild_main_menu(d);
         break;
     case DEDIT_MPCP:
         if (number > GET_SKILL(CH, SKILL_BR_COMPUTER))
-            send_to_char(CH, "You can't create a part for a deck with more MPCP than your Computer B/R Skill. Enter Target MPCP: ");
-        else if (number < 1 || number > 15)
-            send_to_char(CH, "Target MPCP must be between 1 and 15. Enter Target MPCP: ");
+          send_to_char(CH, "You can't create a part for a deck with more MPCP than your Computer B/R Skill (%d). Enter Target MPCP: ", GET_SKILL(CH, SKILL_BR_COMPUTER));
+        else if (number < 1 || number > MAX_CUSTOM_MPCP_RATING)
+          send_to_char(CH, "Target MPCP must be between 1 and %d. Enter Target MPCP: ", MAX_CUSTOM_MPCP_RATING);
         else {
-            if (GET_OBJ_VAL(PART, 0) == PART_MPCP)
-                GET_OBJ_VAL(PART, 1) = GET_OBJ_VAL(PART, 2) = number;
-            else {
-                GET_OBJ_VAL(PART, 2) = number;
-                GET_OBJ_VAL(PART, 1) = 0;
-            }
-            partbuild_main_menu(d);
+          if (GET_PART_TYPE(PART) == PART_MPCP) {
+            GET_PART_RATING(PART) = number;
+            GET_PART_TARGET_MPCP(PART) = number;
+          } else {
+            GET_PART_TARGET_MPCP(PART) = number;
+            GET_PART_RATING(PART) = 0;
+          }
+          partbuild_main_menu(d);
         }
         break;
     case DEDIT_TYPE:
-        if (number < 1 || number > 25)
+        if (number < PART_ACTIVE || number >= NUM_PARTS)
             send_to_char(CH, "Invalid Selection! Enter Part Number: ");
         else {
-            GET_OBJ_VAL(PART, 0) = number;
-            GET_OBJ_VAL(PART, 1) = 0;
+            GET_PART_TYPE(PART) = number;
+            GET_PART_RATING(PART) = 0;
             partbuild_main_menu(d);
         }
         break;
@@ -312,7 +329,7 @@ void dbuild_parse(struct descriptor_data *d, const char *arg) {
     }
 }
 void create_part(struct char_data *ch) {
-    struct obj_data *part = read_object(112, VIRTUAL);
+    struct obj_data *part = read_object(OBJ_BLANK_PART_DESIGN, VIRTUAL);
     STATE(ch->desc) = CON_PART_CREATE;
     part->restring = str_dup("An empty part design");
     ch->desc->edit_obj = part;
@@ -320,7 +337,7 @@ void create_part(struct char_data *ch) {
 }
 
 void create_deck(struct char_data *ch) {
-    struct obj_data *deck = read_object(113, VIRTUAL);
+    struct obj_data *deck = read_object(OBJ_CUSTOM_CYBERDECK_SHELL, VIRTUAL);
     STATE(ch->desc) = CON_DECK_CREATE;
     ch->desc->edit_obj = deck;
     deckbuild_main_menu(ch->desc);
@@ -509,57 +526,65 @@ ACMD(do_build) {
         send_to_char(ch, "You don't have that deck.\r\n");
         return;
     }
-    if (GET_OBJ_VAL(obj, 0) == PART_MPCP && GET_OBJ_VAL(deck, 0)) {
+    if (GET_PART_TYPE(obj) == PART_MPCP && GET_CYBERDECK_MPCP(deck)) {
         struct obj_data *temp = deck->contains;
-        if (GET_OBJ_VAL(obj, 2) != GET_OBJ_VAL(deck, 0))
+        if (GET_PART_TARGET_MPCP(obj) != GET_CYBERDECK_MPCP(deck))
             for (; temp; temp = temp->next_content)
-                if (GET_OBJ_TYPE(temp) == ITEM_PART && GET_OBJ_VAL(obj, 2) == GET_OBJ_VAL(temp, 2))
+                if (GET_OBJ_TYPE(temp) == ITEM_PART && GET_PART_TARGET_MPCP(obj) == GET_PART_TARGET_MPCP(temp))
                     break;
         if (!temp) {
-            send_to_char(ch, "That part is not designed for the same MPCP as this deck.\r\n");
+            send_to_char(ch, "%s is not designed for the same MPCP as %s.\r\n", capitalize(GET_OBJ_NAME(obj)), decapitalize_a_an(GET_OBJ_NAME(deck)));
             return;
         }
     }
-    if (GET_OBJ_TYPE(obj) != ITEM_PART || GET_OBJ_TYPE(deck) != ITEM_CUSTOM_DECK)
-        send_to_char(ch, "You can't build a part out of that.\r\n");
-    else if (GET_OBJ_VAL(obj, 3))
-        send_to_char(ch, "You must make a design for that part first.\r\n");
-    else if (GET_OBJ_VAL(obj, 0) != PART_MPCP && (GET_OBJ_VAL(obj, 2) != GET_OBJ_VAL(deck, 0) && GET_OBJ_VAL(deck, 0)) &&
-             (parts[GET_OBJ_VAL(obj, 0)].design >= 0 || GET_OBJ_VAL(obj, 0) == PART_ACTIVE ||
-              GET_OBJ_VAL(obj, 0) == PART_STORAGE || GET_OBJ_VAL(obj, 0) == PART_MATRIX_INTERFACE))
-        send_to_char(ch, "That part is not designed for the same MPCP as this deck.\r\n");
-    else if (GET_OBJ_VAL(obj, 7) != GET_IDNUM(ch) && GET_OBJ_VAL(obj, 7) > 0)
-        send_to_char(ch, "Someone else has already started on that part.\r\n");
+    if (GET_OBJ_TYPE(obj) != ITEM_PART)
+        send_to_char(ch, "You can't build a part out of %s.\r\n", decapitalize_a_an(GET_OBJ_NAME(obj)));
+  else if (GET_OBJ_TYPE(deck) != ITEM_CUSTOM_DECK)
+    send_to_char(ch, "%s isn't a custom deck; how exactly did you plan to build %s into it?\r\n", capitalize(GET_OBJ_NAME(deck)), decapitalize_a_an(GET_OBJ_NAME(obj)));
+    else if (GET_PART_DESIGN_COMPLETION(obj))
+        send_to_char(ch, "You must make a design for %s first.\r\n", decapitalize_a_an(GET_OBJ_NAME(obj)));
+    else if (GET_PART_TYPE(obj) != PART_MPCP
+             && (GET_CYBERDECK_MPCP(deck) && GET_PART_TARGET_MPCP(obj) != GET_CYBERDECK_MPCP(deck))
+             && (parts[GET_PART_TYPE(obj)].design >= 0
+                 || GET_PART_TYPE(obj) == PART_ACTIVE
+                 || GET_PART_TYPE(obj) == PART_STORAGE
+                 || GET_PART_TYPE(obj) == PART_MATRIX_INTERFACE))
+        send_to_char(ch, "%s is not designed for the same MPCP as %s.\r\n", capitalize(GET_OBJ_NAME(obj)), decapitalize_a_an(GET_OBJ_NAME(deck)));
+    else if (GET_PART_BUILDER_IDNUM(obj) != GET_IDNUM(ch) && GET_PART_BUILDER_IDNUM(obj) > 0)
+        send_to_char(ch, "Someone else has already started on %s.\r\n", decapitalize_a_an(GET_OBJ_NAME(obj)));
     else {
         struct obj_data *workshop = NULL;
-        int kit = 0, target = -GET_OBJ_VAL(obj, 5), duration = 0, skill = 0;
+        int kit_rating = 0, target = -GET_OBJ_VAL(obj, 5), duration = 0, skill = 0;
         if (has_kit(ch, TYPE_MICROTRONIC))
-            kit = TYPE_KIT;
-        if ((workshop = find_workshop(ch, TYPE_MICROTRONIC)) && GET_OBJ_VAL(workshop, 0) > kit)
-            kit = GET_OBJ_VAL(workshop, 0);
-        if (kit < parts[GET_OBJ_VAL(obj, 0)].tools) {
+            kit_rating = TYPE_KIT;
+        if ((workshop = find_workshop(ch, TYPE_MICROTRONIC)) && GET_OBJ_VAL(workshop, 0) > kit_rating)
+            kit_rating = GET_WORKSHOP_TYPE(workshop);
+        if (kit_rating < parts[GET_PART_TYPE(obj)].tools) {
             send_to_char(ch, "You don't have the right tools for that job.\r\n");
             return;
         } else if (parts[GET_OBJ_VAL(obj, 0)].tools == TYPE_KIT) {
-            if (kit == TYPE_SHOP)
+            if (kit_rating == TYPE_SHOP)
                 target--;
-            else if (kit == TYPE_FACILITY)
+            else if (kit_rating == TYPE_FACILITY)
                 target -= 3;
-        } else if (parts[GET_OBJ_VAL(obj, 0)].tools == TYPE_SHOP && kit == TYPE_FACILITY)
+        } else if (parts[GET_OBJ_VAL(obj, 0)].tools == TYPE_SHOP && kit_rating == TYPE_FACILITY)
             target--;
-        if (GET_OBJ_VAL(obj, 0) == PART_BOD || GET_OBJ_VAL(obj, 0) == PART_SENSOR || GET_OBJ_VAL(obj, 0) == PART_MASKING || GET_OBJ_VAL(obj, 0) == PART_EVASION) {
-            int total = GET_OBJ_VAL(obj, 1);
+        if (GET_PART_TYPE(obj) == PART_BOD || GET_PART_TYPE(obj) == PART_SENSOR || GET_PART_TYPE(obj) == PART_MASKING || GET_PART_TYPE(obj) == PART_EVASION) {
+            int total = GET_PART_RATING(obj);
             for (struct obj_data *part = deck->contains; part; part = part->next_content)
-                if (GET_OBJ_TYPE(part) == ITEM_PART && (GET_OBJ_VAL(part, 0) == PART_BOD || GET_OBJ_VAL(part, 0) == PART_SENSOR || GET_OBJ_VAL(part, 0) == PART_MASKING || GET_OBJ_VAL(part, 0) == PART_EVASION))
+                if (GET_OBJ_TYPE(part) == ITEM_PART && (GET_PART_TYPE(part) == PART_BOD || GET_PART_TYPE(part) == PART_SENSOR || GET_PART_TYPE(part) == PART_MASKING || GET_PART_TYPE(part) == PART_EVASION))
                     total += GET_OBJ_VAL(part, 1);
-            if (total > GET_OBJ_VAL(deck, 0) * 3) {
-                send_to_char("Persona programs are limited to three times the MPCP rating of the deck.\r\n", ch);
+            if (total > GET_CYBERDECK_MPCP(deck) * 3) {
+                send_to_char(ch, "The total persona program rating for MPCP %d decks is limited to %d; that would make it %d.\r\n",
+                             GET_CYBERDECK_MPCP(deck),
+                             GET_CYBERDECK_MPCP(deck) * 3,
+                             total);
                 return;
             }
         }
         for (struct obj_data *part = deck->contains; part; part = part->next_content)
-            if (GET_OBJ_TYPE(part) == TYPE_PARTS && (GET_OBJ_VAL(part, 0) == GET_OBJ_VAL(obj, 0) || (GET_OBJ_VAL(part, 0) ==
-                    PART_ASIST_HOT && GET_OBJ_VAL(obj, 0) == PART_ASIST_COLD) || (GET_OBJ_VAL(part, 0) == PART_ASIST_COLD && GET_OBJ_VAL(obj, 0) == PART_ASIST_HOT))) {
+            if (GET_OBJ_TYPE(part) == TYPE_PARTS && (GET_PART_TYPE(part) == GET_PART_TYPE(obj) || (GET_PART_TYPE(part) ==
+                    PART_ASIST_HOT && GET_PART_TYPE(obj) == PART_ASIST_COLD) || (GET_PART_TYPE(part) == PART_ASIST_COLD && GET_PART_TYPE(obj) == PART_ASIST_HOT))) {
                 send_to_char(ch, "You have already installed a part of that type in there.\r\n");
                 return;
             }

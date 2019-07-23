@@ -138,6 +138,14 @@ bool perform_hit(struct char_data *ch, char *argument, const char *cmdname)
     send_to_char(ch, "You can only drive by or use mounts inside a vehicle.\r\n");
     return TRUE;
   }
+  
+  // If you're wielding a non-weapon, give an error message and bail.
+  struct obj_data *weapon = GET_EQ(ch, WEAR_WIELD) ? GET_EQ(ch, WEAR_WIELD) : GET_EQ(ch, WEAR_HOLD);
+  if (weapon && GET_OBJ_TYPE(weapon) != ITEM_WEAPON) {
+    send_to_char(ch, "You can't figure out how to attack while using %s as a weapon.\r\n", decapitalize_a_an(GET_OBJ_NAME(weapon)));
+    return TRUE;
+  }
+  
   if (!*arg)
   {
     sprintf(buf, "%s what?\r\n", cmdname);
@@ -262,9 +270,14 @@ bool perform_hit(struct char_data *ch, char *argument, const char *cmdname)
 
   if (veh)
   {
-    if (FIGHTING_VEH(ch) == veh) {
-      send_to_char(ch, "But you're already attacking it.\r\n");
-      return TRUE;
+    if (FIGHTING_VEH(ch)) {
+      if (FIGHTING_VEH(ch) == veh) {
+        send_to_char(ch, "But you're already attacking it.\r\n");
+        return TRUE;
+      } else {
+        // They're switching targets.
+        stop_fighting(ch);
+      }
     }
     
     if (!PRF_FLAGGED(ch, PRF_PKER) && veh->owner && GET_IDNUM(ch) != veh->owner) {
@@ -285,11 +298,11 @@ bool perform_hit(struct char_data *ch, char *argument, const char *cmdname)
         sprintf(buf, "%s aims %s right at your ride!\r\n", GET_NAME(ch), GET_OBJ_NAME(GET_EQ(ch, WEAR_HOLD)));
         send_to_veh(buf, veh, NULL, TRUE);
       } else {
-        send_to_char(ch, "You take a swing at %s!\r\n", GET_VEH_NAME(veh));
+        send_to_char(ch, "You prepare to take a swing at %s!\r\n", GET_VEH_NAME(veh));
         if (get_speed(veh) > 10)
           sprintf(buf, "%s throws %sself out in front of you!\r\n", GET_NAME(ch), thrdgenders[(int)GET_SEX(ch)]);
         else
-          sprintf(buf, "%s takes a swing at your ride!\r\n", GET_NAME(ch));
+          sprintf(buf, "%s winds up to take a swing at your ride!\r\n", GET_NAME(ch));
         send_to_veh(buf, veh, NULL, TRUE);
       }
       

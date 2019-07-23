@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mysql/mysql.h>
+#include <time.h>
 
 #include "awake.h"
 #include "structs.h"
@@ -20,13 +20,10 @@
 #include "olc.h"
 #include "handler.h"
 #include "comm.h"
+#include "newdb.h"
 
 // Externs from other files.
-extern MYSQL *mysql;
 extern void store_mail(long to, struct char_data *from, const char *message_pointer);
-
-// Prototypes from other files.
-int mysql_wrapper(MYSQL *mysql, const char *query);
 
 // Prototypes from this file.
 void perform_pgroup_grant_revoke(struct char_data *ch, char *argument, bool revoke);
@@ -89,6 +86,8 @@ ACMD(do_accept) {
     return;
   }
   
+  skip_spaces(&argument);
+  
   // Remove any expired invitations.
   Pgroup_invitation::prune_expired(ch);
   
@@ -104,7 +103,7 @@ ACMD(do_accept) {
     }
     
     // if argument matches case-insensitively with invitation's group's alias
-    if (str_cmp(argument, pgr->get_name()) != 0) {
+    if (strn_cmp(argument, pgr->get_name(), strlen(argument)) == 0 || strn_cmp(argument, pgr->get_alias(), strlen(argument)) == 0) {
       send_to_char(ch, "You accept the invitation and declare yourself a member of '%s'.\r\n", pgr->get_name());
       
       // Notify all online members.
@@ -114,7 +113,7 @@ ACMD(do_accept) {
           if (pgr->is_secret() && !GET_PGROUP_MEMBER_DATA(i)->privileges.AreAnySet(PRIV_COCONSPIRATOR, PRIV_LEADER, ENDBIT)) {
             send_to_char(i, "You notice that the membership numbers for '%s' have gone up.\r\n", pgr->get_name());
           } else {
-            send_to_char(i, "%s has joined '%s'.\r\n", pgr->get_name());
+            send_to_char(i, "%s has joined '%s'.\r\n", GET_CHAR_NAME(ch), pgr->get_name());
           }
         }
       }
@@ -150,6 +149,8 @@ ACMD(do_decline) {
     return;
   }
   
+  skip_spaces(&argument);
+  
   // Remove any expired invitations.
   Pgroup_invitation::prune_expired(ch);
   
@@ -165,7 +166,7 @@ ACMD(do_decline) {
     }
     
     // If argument matches case-insensitively with invitation's group's alias:
-    if (str_cmp(argument, pgr->get_name()) != 0) {
+    if (strn_cmp(argument, pgr->get_name(), strlen(argument)) == 0 || strn_cmp(argument, pgr->get_alias(), strlen(argument)) == 0) {
       send_to_char(ch, "You decline the invitation from '%s'.\r\n", pgr->get_name());
       
       // Drop the invitation.
@@ -686,7 +687,7 @@ void do_pgroup_logs(struct char_data *ch, char *argument) {
   } else {
     days = atoi(argument);
     if (days < 1) {
-      send_to_char("Syntax: PGROUP LOGS [number of days of history to include]", ch);
+      send_to_char("Syntax: PGROUP LOGS [number of days of history to include]\r\n", ch);
       return;
     }
     if (days > MAX_PGROUP_LOG_READBACK) {
@@ -769,7 +770,7 @@ void do_pgroup_outcast(struct char_data *ch, char *argument) {
   
   // Ensure targeted character is part of the same group as the invoking character.
   if (!(GET_PGROUP_MEMBER_DATA(vict) && GET_PGROUP(vict) && GET_PGROUP(vict) == GET_PGROUP(ch))) {
-    send_to_char(ch, "%s's not part of your group.\r\n", HSSH(vict));
+    send_to_char(ch, "%s's not part of your group.\r\n", capitalize(HSSH(vict)));
     return;
   }
   
@@ -1356,7 +1357,7 @@ void perform_pgroup_grant_revoke(struct char_data *ch, char *argument, bool revo
   
   // Ensure targeted character is part of the same group as the invoking character.
   if (!(GET_PGROUP_MEMBER_DATA(vict) && GET_PGROUP(vict) && GET_PGROUP(vict) == GET_PGROUP(ch))) {
-    send_to_char(ch, "%s's not part of your group.\r\n", HSSH(vict));
+    send_to_char(ch, "%s's not part of your group.\r\n", capitalize(HSSH(vict)));
     return;
   }
   
@@ -1435,8 +1436,8 @@ void do_pgroup_promote_demote(struct char_data *ch, char *argument, bool promote
   }
   
   // Bounds check rank.
-  if (!(rank = atoi(rank_string)) || rank < 0 || rank > MAX_PGROUP_RANK) {
-    send_to_char(ch, "You must specify a rank between 1 and %d.\r\n", MAX_PGROUP_RANK);
+  if (!(rank = atoi(rank_string)) || rank < (promote ? 2 : 1) || rank > MAX_PGROUP_RANK) {
+    send_to_char(ch, "You must specify a rank between %d and %d.\r\n", promote ? 2 : 1, MAX_PGROUP_RANK);
     return;
   }
   
@@ -1471,7 +1472,7 @@ void do_pgroup_promote_demote(struct char_data *ch, char *argument, bool promote
   
   // Ensure targeted character is part of the same group as the invoking character.
   if (!(GET_PGROUP_MEMBER_DATA(vict) && GET_PGROUP(vict) && GET_PGROUP(vict) == GET_PGROUP(ch))) {
-    send_to_char(ch, "%s's not part of your group.\r\n", HSSH(vict));
+    send_to_char(ch, "%s's not part of your group.\r\n", capitalize(HSSH(vict)));
     return;
   }
   

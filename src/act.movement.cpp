@@ -22,6 +22,7 @@
 #include "transport.h"
 #include "constants.h"
 #include "newmagic.h"
+#include "config.h"
 
 /* external functs */
 int special(struct char_data * ch, int cmd, char *arg);
@@ -37,7 +38,6 @@ extern bool is_escortee(struct char_data *mob);
 extern bool hunting_escortee(struct char_data *ch, struct char_data *vict);
 extern void death_penalty(struct char_data *ch);
 extern int modify_veh(struct veh_data *veh);
-extern void make_desc(struct char_data *ch, struct char_data *i);
 
 extern sh_int mortal_start_room;
 extern sh_int frozen_start_room;
@@ -577,7 +577,7 @@ void move_vehicle(struct char_data *ch, int dir)
 #endif
       || ROOM_FLAGGED(EXIT(veh, dir)->to_room, ROOM_FALL))
   {
-    send_to_char("You cannot go that way...\r\n", ch);
+    send_to_char(CANNOT_GO_THAT_WAY, ch);
     return;
   }
   
@@ -592,7 +592,7 @@ void move_vehicle(struct char_data *ch, int dir)
   if (ROOM_FLAGGED(EXIT(veh, dir)->to_room, ROOM_STAFF_ONLY)) {
     for (struct char_data *tch = veh->people; tch; tch = tch->next_in_veh) {
       if (!access_level(tch, LVL_BUILDER)) {
-        send_to_char("Everyone in the vehicle must be a member of the game's administration to go there.", ch);
+        send_to_char("Everyone in the vehicle must be a member of the game's administration to go there.\r\n", ch);
         return;
       }
     }
@@ -793,11 +793,11 @@ int perform_move(struct char_data *ch, int dir, int extra, struct char_data *vic
   if (AFF_FLAGGED(ch, AFF_BINDING)) {
     if (success_test(GET_STR(ch), ch->points.binding) > 0) {
       act("$n breaks the bindings at $s feet!", TRUE, ch, 0, 0, TO_ROOM);
-      send_to_char("You break through the bindings at your feet!", ch);
+      send_to_char("You break through the bindings at your feet!\r\n", ch);
       AFF_FLAGS(ch).RemoveBit(AFF_BINDING);
     } else {
       act("$n struggles against the bindings at $s feet, but can't seem to break them.", TRUE, ch, 0, 0, TO_ROOM);
-      send_to_char("You struggle against the bindings at your feet but get nowhere!", ch);
+      send_to_char("You struggle against the bindings at your feet but get nowhere!\r\n", ch);
       return 0;
     }
   }
@@ -1282,6 +1282,11 @@ ACMD(do_drag)
 
   if (!*buf1 || !*buf2) {
     send_to_char("Who do you want to drag where?\r\n", ch);
+    return;
+  }
+  
+  if (IS_ASTRAL(ch)) {
+    send_to_char("Astral projections aren't really known for their ability to drag things.\r\n", ch);
     return;
   }
 

@@ -13,6 +13,7 @@
 #include "bitfield.h"
 #include "utils.h"
 #include "playergroup_classes.h"
+#include "protocol.h"
 
 #define SPECIAL(name) \
    int (name)(struct char_data *ch, void *me, int cmd, char *argument)
@@ -165,7 +166,7 @@ struct room_data
   char *night_desc;
   struct extra_descr_data *ex_description; /* for examine/look       */
   struct room_direction_data *dir_option[NUM_OF_DIRS]; /* Directions */
-  struct room_direction_data *temporary_stored_exit; // Stores exits that elevators overwrote
+  struct room_direction_data *temporary_stored_exit[NUM_OF_DIRS]; // Stores exits that elevators or spec procs overwrote
   vnum_t matrix;		/* Matrix exit */
   int access;
   int io;
@@ -203,12 +204,14 @@ struct room_data
 #endif
   room_data() :
       name(NULL), description(NULL), night_desc(NULL), ex_description(NULL),
-      temporary_stored_exit(NULL), matrix(0), access(0), io(0), trace(0),
+      matrix(0), access(0), io(0), trace(0),
       bandwidth(0), jacknumber(0), address(NULL), peaceful(0), func(NULL), contents(NULL),
       people(NULL), vehicles(NULL), watching(NULL)
   {
-    for (int i = 0; i < NUM_OF_DIRS; i++)
+    for (int i = 0; i < NUM_OF_DIRS; i++) {
       dir_option[i] = NULL;
+      temporary_stored_exit[i] = NULL;
+    }
     
     for (int i = 0; i < NUM_WORKSHOP_TYPES; i++)
       best_workshop[i] = NULL;
@@ -467,7 +470,13 @@ struct char_special_data
       fight_veh(NULL), fighting(NULL), hunting(NULL), programming(NULL),
       position(POS_STANDING), defined_position(NULL), leave(NULL), arrive(NULL), subscribe(NULL), rigging(NULL),
       mindlink(NULL), spirits(NULL)
-  {}
+  {
+    for (int i = 0; i < 3; i++)
+      conjure[i] = 0;
+    
+    for (int i = 0; i < 3; i++)
+      coord[i] = 0;
+  }
 };
 
 struct player_special_data_saved
@@ -514,7 +523,14 @@ struct player_special_data
   player_special_data() :
       aliases(NULL), remem(NULL), last_tell(0),
       questnum(0), obj_complete(NULL), mob_complete(NULL), watching(NULL), ignored(NULL)
-  {}
+  {
+    for (int i = 0; i < NUM_DRUGS+1; i++)
+      for (int j = 0; j < 7; j++)
+        drugs[i][j] = 0;
+    
+    for (int i = 0; i < 5; i++)
+      drug_affect[i] = 0;
+  }
 }
 ;
 
@@ -540,7 +556,10 @@ struct mob_special_data
 
   mob_special_data() :
       memory(NULL), alert(0), alerttime(0), lasthit(0)
-  {}
+  {
+    for (int i = 0; i < 10; i++)
+      mob_skills[i] = 0;
+  }
 }
 ;
 
@@ -697,7 +716,8 @@ struct char_data
   
   Pgroup_data *pgroup;                   /* Data concerning the player group this char is part of. */
   Pgroup_invitation *pgroup_invitations; /* The list of open group invitations associated with this player. */
-
+  
+  /* Adding a field here? If it's a pointer, add it to utils.cpp's copy_over_necessary_info() to avoid breaking mdelete etc. */
 
   char_data() :
       in_room(NULL), was_in_room(NULL), player_specials(NULL), in_veh(NULL), persona(NULL), squeue(NULL), sustained(NULL),
@@ -779,11 +799,13 @@ struct descriptor_data
   struct descriptor_data *snoop_by; /* And who is snooping this char    */
   struct descriptor_data *next; /* link to next descriptor              */
   struct ccreate_t ccr;
+  int invalid_command_counter;
   
   listClass<const char *> message_history[NUM_COMMUNICATION_CHANNELS];
 
   // all this from here down is stuff for on-line creation
   int edit_mode;                /* editing sub mode */
+  bool edit_convert_color_codes; /* if this is true, display color codes in descs as ^^ for copy-paste */
   long edit_number;              /* virtual num of thing being edited */
   long edit_number2;             /* misc number for editing */
   int edit_zone;                /* which zone object is part of      */
@@ -798,17 +820,21 @@ struct descriptor_data
   struct veh_data *edit_veh;    /* vedit */
   struct host_data *edit_host;  /* hedit */
   struct matrix_icon *edit_icon; /* icedit */
+  struct help_data *edit_helpfile;
   
   Playergroup *edit_pgroup; /* playergroups */
+  
+  protocol_t *pProtocol;
   
   // this is for spell creation
 
   descriptor_data() :
       showstr_head(NULL), showstr_point(NULL), str(NULL), output(NULL),
       large_outbuf(NULL), character(NULL), original(NULL), snooping(NULL),
-      snoop_by(NULL), next(NULL), misc_data(NULL), edit_obj(NULL), edit_room(NULL),
-      edit_mob(NULL), edit_quest(NULL), edit_shop(NULL), edit_zon(NULL),
-      edit_cmd(NULL), edit_veh(NULL), edit_host(NULL), edit_icon(NULL), edit_pgroup(NULL)
+      snoop_by(NULL), next(NULL), invalid_command_counter(0), misc_data(NULL),
+      edit_obj(NULL), edit_room(NULL), edit_mob(NULL), edit_quest(NULL), edit_shop(NULL),
+      edit_zon(NULL), edit_cmd(NULL), edit_veh(NULL), edit_host(NULL), edit_icon(NULL),
+      edit_helpfile(NULL), edit_pgroup(NULL), pProtocol(NULL)
   {
     // Zero out the communication history for all channels.
     for (int channel = 0; channel < NUM_COMMUNICATION_CHANNELS; channel++)
@@ -1079,6 +1105,24 @@ struct combat_data
     weapon_is_gun = (weapon && IS_GUN(GET_OBJ_VAL((weapon), 3)));
     if (weapon_is_gun)
       magazine = weapon->contains;
+  }
+};
+
+struct help_data {
+  // title: varchar 128
+  const char *original_title;
+  const char *title;
+  // body: text
+  char *body;
+  int category; // currently unused
+  // links: varchar 200
+  char *links; // currently unused
+  
+  // Set title_to_keep to NULL for a new helpfile.
+  help_data(const char *title_to_keep_for_sql) :
+    original_title(NULL), title(NULL), body(NULL), category(0), links(NULL)
+  {
+    original_title = title_to_keep_for_sql;
   }
 };
 #endif

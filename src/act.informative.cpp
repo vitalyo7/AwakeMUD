@@ -16,7 +16,6 @@
 #include <errno.h>
 #include <iostream>
 #include <fstream>
-#include <mysql/mysql.h>
 
 using namespace std;
 
@@ -52,8 +51,6 @@ extern const char *dist_name[];
 extern int same_obj(struct obj_data * obj1, struct obj_data * obj2);
 extern int find_sight(struct char_data *ch);
 extern int belongs_to(struct char_data *ch, struct obj_data *obj);
-extern int mysql_wrapper(MYSQL *mysql, const char *query);
-extern MYSQL *mysql;
 
 extern int get_weapon_damage_type(struct obj_data* weapon);
 
@@ -91,7 +88,7 @@ const char* blood_messages[] = {
 
 /* end blood stuff */
 
-char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act)
+char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act, bool dont_capitalize_a_an)
 {
   char buf2[MAX_STRING_LENGTH];
   if (!IS_NPC(i) && ((GET_EQ(i, WEAR_HEAD) && GET_OBJ_VAL(GET_EQ(i, WEAR_HEAD), 7) > 1) ||
@@ -104,14 +101,14 @@ char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act)
     (GET_EQ(i, WEAR_BODY) ? GET_OBJ_VAL(GET_EQ(i, WEAR_BODY), 7) : 0) +
     (GET_EQ(i, WEAR_UNDER) ? GET_OBJ_VAL(GET_EQ(i, WEAR_UNDER), 7) : 0);
     conceal = act == 2 ? 4 : success_test(GET_INT(ch) + GET_POWER(ch, ADEPT_IMPROVED_PERCEPT), conceal);
-    sprintf(buf, "A");
+    sprintf(buf, "%s", dont_capitalize_a_an ? "a" : "A");
     if (conceal > 0) {
       if (GET_HEIGHT(i) < 130)
         strcat(buf, " tiny");
       else if (GET_HEIGHT(i) < 160)
         strcat(buf, " small");
       else if (GET_HEIGHT(i) < 190)
-        strcat(buf, " average");
+        strcat(buf, "n average");
       else if (GET_HEIGHT(i) < 220)
         strcat(buf, " large");
       else
@@ -124,16 +121,16 @@ char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act)
     else
       strcat(buf, " person");
     if (GET_EQ(i, WEAR_ABOUT))
-      sprintf(buf + strlen(buf), " wearing %s", GET_OBJ_NAME(GET_EQ(i, WEAR_ABOUT)));
+      sprintf(buf + strlen(buf), " wearing %s", decapitalize_a_an(GET_OBJ_NAME(GET_EQ(i, WEAR_ABOUT))));
     else if (GET_EQ(i, WEAR_BODY))
-      sprintf(buf + strlen(buf), " wearing %s", GET_OBJ_NAME(GET_EQ(i, WEAR_BODY)));
+      sprintf(buf + strlen(buf), " wearing %s", decapitalize_a_an(GET_OBJ_NAME(GET_EQ(i, WEAR_BODY))));
     else if (GET_EQ(i, WEAR_UNDER))
-      sprintf(buf + strlen(buf), " wearing %s", GET_OBJ_NAME(GET_EQ(i, WEAR_UNDER)));
+      sprintf(buf + strlen(buf), " wearing %s", decapitalize_a_an(GET_OBJ_NAME(GET_EQ(i, WEAR_UNDER))));
   } else
   {
     struct remem *mem;
     if (!act) {
-      strcpy(buf, CAP(GET_NAME(i)));
+      strcpy(buf, dont_capitalize_a_an ? decapitalize_a_an(CAP(GET_NAME(i))) : CAP(GET_NAME(i)));
       if (IS_SENATOR(ch) && !IS_NPC(i))
         sprintf(ENDOF(buf), " (%s)", CAP(GET_CHAR_NAME(i)));
       else if ((mem = found_mem(GET_MEMORY(ch), i)))
@@ -141,7 +138,7 @@ char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act)
     } else if ((mem = found_mem(GET_MEMORY(ch), i)) && act != 2)
       strcpy(buf, CAP(mem->mem));
     else
-      strcpy(buf, CAP(GET_NAME(i)));
+      strcpy(buf, dont_capitalize_a_an ? decapitalize_a_an(CAP(GET_NAME(i))) : CAP(GET_NAME(i)));
   }
   if (GET_SUSTAINED(i) && (IS_ASTRAL(ch) || IS_DUAL(ch)))
   {
@@ -153,7 +150,7 @@ char *make_desc(struct char_data *ch, struct char_data *i, char *buf, int act)
   }
   
   if (!IS_NPC(i) && PRF_FLAGGED(ch, PRF_LONGWEAPON) && GET_EQ(i, WEAR_WIELD))
-    sprintf(ENDOF(buf), ", wielding %s", GET_OBJ_NAME(GET_EQ(i, WEAR_WIELD)));
+    sprintf(ENDOF(buf), ", wielding %s", decapitalize_a_an(GET_OBJ_NAME(GET_EQ(i, WEAR_WIELD))));
   
   if (AFF_FLAGGED(i, AFF_MANIFEST) && !(IS_ASTRAL(ch) || IS_DUAL(ch)))
   {
@@ -431,7 +428,7 @@ void diag_char_to_char(struct char_data * i, struct char_data * ch)
   else
     ment = -1;
   
-  make_desc(ch, i, buf, TRUE);
+  make_desc(ch, i, buf, TRUE, FALSE);
   CAP(buf);
   
   if (phys >= 100 || (GET_TRADITION(i) == TRAD_ADEPT && phys >= 0 &&
@@ -732,7 +729,7 @@ void list_one_char(struct char_data * i, struct char_data * ch)
     else if (mob_index[GET_MOB_RNUM(i)].func == metamagic_teacher) {
       // Mundanes can't see metamagic teachers' abilities.
       if (GET_TRADITION(ch) != TRAD_MUNDANE)
-        sprintf(ENDOF(buf), "^y...%s looks willing to help you train your metamagic.^n\r\n", HSSH(i));
+        sprintf(ENDOF(buf), "^y...%s looks willing to help you train in metamagic techniques.^n\r\n", HSSH(i));
     }
     else if (mob_index[GET_MOB_RNUM(i)].func == adept_trainer) {
       // Mundanes can't see adept trainers' abilities.
@@ -752,7 +749,7 @@ void list_one_char(struct char_data * i, struct char_data * ch)
     
     return;
   }
-  make_desc(ch, i, buf, FALSE);
+  make_desc(ch, i, buf, FALSE, FALSE);
   if (PRF_FLAGGED(i, PRF_AFK))
     strcat(buf, " (AFK)");
   if (PLR_FLAGGED(i, PLR_SWITCHED))
@@ -964,9 +961,21 @@ void disp_long_exits(struct char_data *ch, bool autom)
             !LIGHT_OK(ch))
           strcat(buf2, "Too dark to tell.\r\n");
         else {
-          if (IS_SET(EXIT(ch, door)->exit_info, EX_CLOSED))
-            strcat(buf2, "A closed door");
-          else
+          if (IS_SET(EXIT(ch, door)->exit_info, EX_CLOSED)) {
+            SPECIAL(call_elevator);
+            SPECIAL(elevator_spec);
+            // If it leads into an elevator shaft or car from a landing, it's an elevator door.
+            // If it leads into a landing from an elevator shaft or car, it's an elevator door.
+            if (EXIT(ch, door)->to_room && (((ROOM_FLAGGED(EXIT(ch, door)->to_room, ROOM_ELEVATOR_SHAFT) || EXIT(ch, door)->to_room->func == elevator_spec)
+                                              && get_ch_in_room(ch)->func == call_elevator)
+                                            || ((ROOM_FLAGGED(get_ch_in_room(ch), ROOM_ELEVATOR_SHAFT) || get_ch_in_room(ch)->func == elevator_spec)
+                                              && EXIT(ch, door)->to_room->func == call_elevator)
+                                           )) {
+                strcat(buf2, "A pair of closed elevator doors");
+            }
+            else
+              sprintf(ENDOF(buf2), "A closed %s", *(fname(EXIT(ch, door)->keyword)) ? fname(EXIT(ch, door)->keyword) : "door");
+          } else
             strcat(buf2, EXIT(ch, door)->to_room->name);
           strcat(buf2, "\r\n");
         }
@@ -2253,7 +2262,10 @@ ACMD(do_examine)
           strcpy(buf, "Custom Components:\r\n");
           for (struct obj_data *soft = tmp_object->contains; soft; soft = soft->next_content)
             if (GET_OBJ_TYPE(soft) == ITEM_PART)
-              sprintf(ENDOF(buf), "%-30s Type: %-15s\r\n", GET_OBJ_NAME(soft), parts[GET_OBJ_VAL(soft, 0)].name);
+              sprintf(ENDOF(buf), "%-30s Type: %-15s Rating: %d\r\n",
+                      GET_OBJ_NAME(soft),
+                      parts[GET_OBJ_VAL(soft, 0)].name,
+                      GET_PART_RATING(soft));
           send_to_char(buf, ch);
         }
       }
@@ -2294,6 +2306,15 @@ ACMD(do_examine)
         send_to_char(ch, "It is a rating %d spell formula describing %s. It is designed for use by %s mages.\r\n",
                      GET_OBJ_VAL(tmp_object, 0), spells[GET_OBJ_VAL(tmp_object, 1)].name, GET_OBJ_VAL(tmp_object, 2) == 1 ?
                      "shamanic" : "hermetic");
+      }
+    } else if (GET_OBJ_TYPE(tmp_object) == ITEM_DOCWAGON) {
+      if (GET_DOCWAGON_BONDED_IDNUM(tmp_object)) {
+        if (GET_DOCWAGON_BONDED_IDNUM(tmp_object) == GET_IDNUM(ch))
+          send_to_char(ch, "It has been bonded to your biometric signature%s.\r\n\r\n", tmp_object->worn_by != ch ? ", but ^yit won't function until you wear it^n" : "");
+        else
+          send_to_char("It has been activated by someone else and ^ywill not function for you^n.\r\n\r\n", ch);
+      } else {
+        send_to_char("It has not been BONDed yet, and ^ywill not function until it is^n.\r\n\r\n", ch);
       }
     }
     if (GET_OBJ_VNUM(tmp_object) > 1) {
@@ -3682,7 +3703,7 @@ ACMD(do_users)
       sprintf(line, format, d->desc_num, "UNDEFINED",
               state, idletime, timeptr);
     
-    if (*d->host && GET_REAL_LEVEL(tch) <= GET_LEVEL(ch))
+    if (*d->host && GET_DESC_LEVEL(d) <= GET_LEVEL(ch))
       sprintf(line + strlen(line), "[%s]\r\n", d->host);
     else
       strcat(line, "[Hostname unknown]\r\n");

@@ -42,6 +42,7 @@ extern void end_quest(struct char_data *ch);
 extern char *cleanup(char *dest, const char *src);
 extern void damage_equip(struct char_data *ch, struct char_data *victim, int power, int type);
 extern void check_adrenaline(struct char_data *, int);
+extern bool House_can_enter_by_idnum(long idnum, vnum_t house);
 
 void mental_gain(struct char_data * ch)
 {
@@ -380,7 +381,7 @@ void check_idling(void)
         do_return(ch, "", 0, 0);
     } else if (!IS_NPC(ch)) {
       ch->char_specials.timer++;
-      if (!(IS_SENATOR(ch) || IS_WORKING(ch)) || !ch->desc) {
+      if (!(IS_SENATOR(ch) || IS_WORKING(ch) || PLR_FLAGGED(ch, PLR_NO_IDLE_OUT)) || !ch->desc) {
         if (!GET_WAS_IN(ch) && ch->in_room && ch->char_specials.timer > 15) {
           GET_WAS_IN(ch) = ch->in_room;
           if (FIGHTING(ch))
@@ -847,9 +848,9 @@ void save_vehicles(void)
       }
       temp_room = &world[real_room(junkyard_number)];
     } else {
-      // If veh is not in a garage, send it to a garage.
+      // If veh is not in a garage (or the owner is not allowed to enter the house anymore), send it to a garage.
       temp_room = get_veh_in_room(veh);
-      if (!ROOM_FLAGGED(temp_room, ROOM_GARAGE)) {
+      if (!ROOM_FLAGGED(temp_room, ROOM_GARAGE) || (ROOM_FLAGGED(temp_room, ROOM_HOUSE) && !House_can_enter_by_idnum(veh->owner, temp_room->number))) {
         switch (GET_JURISDICTION(veh->in_room)) {
           case ZONE_PORTLAND:
             switch (number(0, 2)) {

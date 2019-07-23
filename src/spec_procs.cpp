@@ -3,7 +3,6 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/types.h>
-#include <mysql/mysql.h>
 
 #if defined(WIN32) && !defined(__CYGWIN__)
 #define strcasecmp(x, y) _stricmp(x,y)
@@ -25,6 +24,7 @@
 #include "newmail.h"
 #include "pocketsec.h"
 #include "limits.h"
+#include "config.h"
 
 /*   external vars  */
 extern struct time_info_data time_info;
@@ -50,8 +50,8 @@ extern int find_sight(struct char_data *ch);
 extern void check_quest_kill(struct char_data *ch, struct char_data *victim);
 extern void wire_nuyen(struct char_data *ch, struct char_data *target, int amount, bool isfile);
 bool memory(struct char_data *ch, struct char_data *vict);
-extern MYSQL *mysql;
-extern int mysql_wrapper(MYSQL *mysql, const char *query);
+
+extern struct command_info cmd_info[];
 
 ACMD_CONST(do_say);
 ACMD(do_echo);
@@ -87,48 +87,6 @@ int fixers_need_save;
 /* ********************************************************************
 *  Special procedures for mobiles                                     *
 ******************************************************************** */
-
-char *how_good(int percent)
-{
-  static char buf[256];
-
-  if (percent < 0)
-    strcpy(buf, " (uh oh! you have a negative skill, please report!)");
-  else if (percent == 0)
-    strcpy(buf, " (not learned)");
-  else if (percent == 1)
-    strcpy(buf, " (awful)");
-  else if (percent == 2)
-    strcpy(buf, " (sloppy)");
-  else if (percent == 3)
-    strcpy(buf, " (average)");
-  else if (percent == 4)
-    strcpy(buf, " (above average)");
-  else if (percent == 5)
-    strcpy(buf, " (good)");
-  else if (percent == 6)
-    strcpy(buf, " (very good)");
-  else if (percent == 7)
-    strcpy(buf, " (distinguished)");
-  else if (percent == 8)
-    strcpy(buf, " (excellent)");
-  else if (percent == 9)
-    strcpy(buf, " (superb)");
-  else if (percent == 10)
-    strcpy(buf, " (learned)");
-  else if (percent <= 20)
-    strcpy(buf, " (amazing)");
-  else if (percent <= 30)
-    strcpy(buf, " (incredible)");
-  else if (percent <= 40)
-    strcpy(buf, " (unbelievable)");
-  else if (percent <= 50)
-    strcpy(buf, " (ludicrous)");
-  else
-    strcpy(buf, " (godly)");
-
-  return (buf);
-}
 
 int max_ability(int i)
 {
@@ -370,9 +328,28 @@ SPECIAL(metamagic_teacher)
 {
   struct char_data *master = (struct char_data *) me;
   int i = 0, x = 0, suc, ind;
-  if (IS_NPC(ch) || !CMD_IS("train") || !CAN_SEE(master, ch) || FIGHTING(ch) ||
-      GET_POS(ch) < POS_SITTING || GET_TRADITION(ch) == TRAD_MUNDANE)
+  if (IS_NPC(ch) || !CMD_IS("train"))
     return FALSE;
+  
+  if (GET_TRADITION(ch) == TRAD_MUNDANE) {
+    send_to_char("You don't have the talent to train here.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (!CAN_SEE(master, ch)) {
+    send_to_char("You'd better become visible first; it's hard to teach someone you can't see.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (FIGHTING(ch)) {
+    send_to_char("Learning a new skill while fighting? Now that would be a neat trick.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (GET_POS(ch) < POS_SITTING) {
+    send_to_char("You'd better sit up first.\r\n", ch);
+    return TRUE;
+  }
 
   skip_spaces(&argument);
 
@@ -437,14 +414,170 @@ SPECIAL(metamagic_teacher)
   return TRUE;
 }
 
+// Teaches every skill that isn't in the other teachers' train lists. The assumption is that if it exists in code but isn't taught anywhere, it's not implemented.
+SPECIAL(nerp_skills_teacher) {
+  struct char_data *master = (struct char_data *) me;
+  int max = NORMAL_MAX_SKILL, skill_num;
+  
+  bool can_teach_skill[MAX_SKILLS];
+  for (int skill = 1; skill < MAX_SKILLS; skill++)
+    can_teach_skill[skill] = TRUE;
+  can_teach_skill[0] = FALSE; // OMGWTFBBQ is not a valid skill
+  can_teach_skill[SKILL_ARMED_COMBAT] = FALSE; // NPC-only skill
+  can_teach_skill[SKILL_UNUSED_WAS_PILOT_FIXED_WING] = FALSE; // what it says on the tin
+  
+  if (IS_NPC(ch) || !CMD_IS("practice"))
+    return FALSE;
+  
+  if (!CAN_SEE(master, ch)) {
+    send_to_char("You'd better become visible first; it's hard to teach someone you can't see.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (FIGHTING(ch)) {
+    send_to_char("Learning a new skill while fighting? Now that would be a neat trick.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (GET_POS(ch) < POS_STANDING) {
+    send_to_char("You'd better stand up first.\r\n", ch);
+    return TRUE;
+  }
+  
+  // Negate any skill in our array that is taught elsewhere in the game.
+  for (int ind = 0; teachers[ind].vnum != 0; ind++)
+    for (int skill_index = 0; skill_index < NUM_TEACHER_SKILLS; skill_index++)
+      if (teachers[ind].s[skill_index] > 0)
+        can_teach_skill[teachers[ind].s[skill_index]] = FALSE;
+  
+  skip_spaces(&argument);
+  
+  if (!*argument) {
+    // Send them a list of skills they can learn here.
+    bool found_a_skill_already = FALSE;
+    for (int skill = SKILL_ATHLETICS; skill < MAX_SKILLS; skill++) {
+      if (can_teach_skill[skill]) {
+        // Mundanes can't learn magic skills.
+        if (GET_TRADITION(ch) == TRAD_MUNDANE && skills[skill].requires_magic)
+          continue;
+        
+        if (GET_SKILL_POINTS(ch) > 0) {
+          // Add conditional messaging.
+          if (!found_a_skill_already) {
+            found_a_skill_already = TRUE;
+            sprintf(buf, "%s can teach you the following:\r\n", GET_NAME(master));
+          }
+          sprintf(buf, "%s  %s\r\n", buf, skills[skill].name);
+        }
+        else if (GET_SKILL(ch, skill) < max && !ch->char_specials.saved.skills[skill][1]) {
+          // Add conditional messaging.
+          if (!found_a_skill_already) {
+            found_a_skill_already = TRUE;
+            sprintf(buf, "%s can teach you the following:\r\n", GET_NAME(master));
+          }
+          sprintf(buf, "%s  %-24s (%d karma %d nuyen)\r\n", buf, skills[skill].name, get_skill_price(ch, skill),
+                  MAX(1000, (GET_SKILL(ch, skill) * 5000)));
+        }
+      }
+    }
+    // Failure case.
+    if (!found_a_skill_already) {
+      send_to_char(ch, "There's nothing %s can teach you that you don't already know.\r\n", GET_NAME(master));
+      return TRUE;
+    }
+    
+    if (GET_SKILL_POINTS(ch) > 0)
+      sprintf(buf, "%s\r\nYou have %d point%s to use for skills.\r\n", buf,
+              GET_SKILL_POINTS(ch), GET_SKILL_POINTS(ch) > 1 ? "s" : "");
+    else
+      sprintf(buf, "%s\r\nYou have %0.2f karma to use for skills.\r\n", buf,
+              ((float)GET_KARMA(ch) / 100));
+    send_to_char(buf, ch);
+    return TRUE;
+  }
+  
+  skill_num = find_skill_num(argument);
+  
+  if (skill_num < 0) {
+    send_to_char(ch, "%s doesn't seem to know anything about that subject.\r\n", GET_NAME(master));
+    return TRUE;
+  }
+  
+  if (!can_teach_skill[skill_num]) {
+    send_to_char(ch, "%s doesn't seem to know about that subject.\r\n", GET_NAME(master));
+    return TRUE;
+  }
+  
+  if (GET_SKILL(ch, skill_num) != REAL_SKILL(ch, skill_num)) {
+    send_to_char("You can't train a skill you currently have a skillsoft or other boost for.\r\n", ch);
+    return TRUE;
+  }
+  
+  // Deny some magic skills to mundane (different flavor from next block, same effect).
+  if ((skill_num == SKILL_CENTERING || skill_num == SKILL_ENCHANTING) && GET_TRADITION(ch) == TRAD_MUNDANE) {
+    send_to_char("Without access to the astral plane you can't even begin to fathom the basics of that skill.\r\n", ch);
+    return TRUE;
+  }
+  
+  // Deny all magic skills to mundane.
+  if (skills[skill_num].requires_magic && GET_TRADITION(ch) == TRAD_MUNDANE) {
+    send_to_char("Without the ability to channel magic, that skill would be useless to you.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (GET_SKILL(ch, skill_num) >= max) {
+    sprintf(arg, "%s You already know more than I can teach you in that area.", GET_CHAR_NAME(ch));
+    do_say(master, arg, 0, SCMD_SAYTO);
+    return TRUE;
+  }
+  
+  if (GET_KARMA(ch) < get_skill_price(ch, skill_num) * 100 &&
+      GET_SKILL_POINTS(ch) <= 0) {
+    send_to_char("You don't have enough karma to improve that skill.\r\n", ch);
+    return TRUE;
+  }
+  if (!PLR_FLAGGED(ch, PLR_AUTH) && GET_NUYEN(ch) < MAX(1000, (GET_SKILL(ch, skill_num) * 5000))) {
+    send_to_char(ch, "You can't afford the %d nuyen practice fee!\r\n",
+                 MAX(1000, (GET_SKILL(ch, skill_num) * 5000)));
+    return TRUE;
+  }
+  if (!PLR_FLAGGED(ch, PLR_AUTH))
+    GET_NUYEN(ch) -= MAX(1000, (GET_SKILL(ch, skill_num) * 5000));
+  if (GET_SKILL_POINTS(ch) > 0)
+    GET_SKILL_POINTS(ch)--;
+  else
+    GET_KARMA(ch) -= get_skill_price(ch, skill_num) * 100;
+  
+  send_to_char("You increase your abilities in this UNIMPLEMENTED SKILL.\r\n", ch);
+  set_character_skill(ch, skill_num, REAL_SKILL(ch, skill_num) + 1, TRUE);
+  if (GET_SKILL(ch, skill_num) >= max)
+    send_to_char("You have learnt all you can here.\r\n", ch);
+  
+  return TRUE;
+}
+
 SPECIAL(teacher)
 {
   struct char_data *master = (struct char_data *) me;
   int i, ind, max, skill_num;
 
-  if (IS_NPC(ch) || !CMD_IS("practice") || !CAN_SEE(master, ch) || FIGHTING(ch) ||
-      GET_POS(ch) < POS_STANDING)
+  if (IS_NPC(ch) || !CMD_IS("practice"))
     return FALSE;
+  
+  if (!CAN_SEE(master, ch)) {
+    send_to_char("You'd better become visible first; it's hard to teach someone you can't see.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (FIGHTING(ch)) {
+    send_to_char("Learning a new skill while fighting? Now that would be a neat trick.\r\n", ch);
+    return TRUE;
+  }
+  
+  if (GET_POS(ch) < POS_STANDING) {
+    send_to_char("You'd better stand up first.\r\n", ch);
+    return TRUE;
+  }
 
   skip_spaces(&argument);
 
@@ -461,7 +594,7 @@ SPECIAL(teacher)
     return TRUE;
   }
 
-  if (!PLR_FLAGGED(ch, PLR_NEWBIE) && GET_SKILL_POINTS(ch) != 0)
+  if (!PLR_FLAGGED(ch, PLR_NEWBIE))
     GET_SKILL_POINTS(ch) = 0;
 
   if (!AWAKE(ch)) {
@@ -626,7 +759,7 @@ SPECIAL(teacher)
     GET_KARMA(ch) -= get_skill_price(ch, skill_num) * 100;
 
   send_to_char(teachers[ind].msg, ch);
-  SET_SKILL(ch, skill_num, REAL_SKILL(ch, skill_num) + 1);
+  set_character_skill(ch, skill_num, REAL_SKILL(ch, skill_num) + 1, TRUE);
   if (GET_SKILL(ch, skill_num) >= max)
     send_to_char("You have learnt all you can here.\r\n", ch);
 
@@ -752,11 +885,16 @@ SPECIAL(trainer)
     return TRUE;
   }
 
-  if (!PLR_FLAGGED(ch, PLR_NEWBIE) && GET_ATT_POINTS(ch) != 0) {
+  if (!access_level(ch, LVL_BUILDER) && !PLR_FLAGGED(ch, PLR_NEWBIE) && GET_ATT_POINTS(ch) != 0) {
     sprintf(buf, "SYSERR: %s graduated from newbie status while still having %d attribute point%s left. How?",
             GET_CHAR_NAME(ch), GET_ATT_POINTS(ch), GET_ATT_POINTS(ch) > 1 ? "s" : "");
     mudlog(buf, ch, LOG_SYSLOG, TRUE);
     GET_ATT_POINTS(ch) = 0;
+  }
+  
+  else if (PLR_FLAGGED(ch, PLR_AUTH) && GET_ATT_POINTS(ch) <= 0) {
+    send_to_char(ch, "You don't have any more attribute points to spend.\r\n");
+    return TRUE;
   }
 
   if (!*argument) {
@@ -1234,7 +1372,7 @@ SPECIAL(car_dealer)
   if (CMD_IS("list")) {
     send_to_char("Available vehicles are:\r\n", ch);
     for (veh = world[car_room].vehicles; veh; veh = veh->next_veh) {
-      sprintf(buf, "%8d - %s\r\n", veh->cost, veh->short_description);
+      sprintf(buf, "%8d - %s\r\n", veh->cost, capitalize(GET_VEH_NAME(veh)));
       send_to_char(buf, ch);
     }
     return TRUE;
@@ -1254,9 +1392,9 @@ SPECIAL(car_dealer)
     newveh->owner = GET_IDNUM(ch);
     newveh->idnum = number(0, 1000000);
     if (veh->type == VEH_DRONE)
-      sprintf(buf, "You buy a %s. It is brought out into the room.\r\n", newveh->short_description);
+      sprintf(buf, "You buy %s. It is brought out into the room.\r\n", GET_VEH_NAME(newveh));
     else
-      sprintf(buf, "You buy a %s. It is wheeled out into the yard.\r\n", newveh->short_description);
+      sprintf(buf, "You buy %s. It is wheeled out into the yard.\r\n", GET_VEH_NAME(newveh));
     send_to_char(buf, ch);
     save_vehicles();
     return TRUE;
@@ -2339,7 +2477,7 @@ SPECIAL(yukiya_dahoto)
 {
   char_data *yukiya = (char_data *) me;
 
-  if (yukiya != NULL && CMD_IS("open") && CAN_SEE(yukiya, ch) &&
+  if (yukiya != NULL && (CMD_IS("open") || CMD_IS("hit") || CMD_IS("shoot")) && CAN_SEE(yukiya, ch) &&
       yukiya->in_room->number == YUKIYA_OFFICE) {
     skip_spaces(&argument);
 
@@ -2804,8 +2942,8 @@ SPECIAL(neophyte_entrance)
   }
   if ((CMD_IS("south") || CMD_IS("enter")) && !PLR_FLAGGED(ch, PLR_NEWBIE)
       && !(IS_SENATOR(ch))) {
-    send_to_char("The barrier prevents you from entering the guild.", ch);
-    send_to_char("NOTE: You may only visit the training grounds until you have received 26 karma.", ch);
+    send_to_char("The barrier prevents you from entering the guild.\r\n", ch);
+    send_to_char("NOTE: You may only visit the training grounds until you have received 26 karma.\r\n", ch);
     act("$n stumbles into the barrier covering the entrance.", FALSE, ch, 0, 0, TO_ROOM);
     return TRUE;
   }
@@ -3852,7 +3990,7 @@ SPECIAL(chargen_untrain_attribute)
   }
   
   if (is_abbrev(argument, "intelligence")) {
-    untrain_attribute(ch, INT, "You slam your head into the wall until your Intelligence decreases to %d.\r\n");
+    untrain_attribute(ch, INT, "You slam your head into a wall until your Intelligence decreases to %d.\r\n");
     return TRUE;
   }
   
@@ -3915,12 +4053,12 @@ SPECIAL(chargen_unpractice_skill)
   
   // Success. Lower the skill by one point.
   GET_SKILL_POINTS(ch)++;
-  SET_SKILL(ch, skill_num, REAL_SKILL(ch, skill_num) - 1);
+  set_character_skill(ch, skill_num, REAL_SKILL(ch, skill_num) - 1, FALSE);
   
   if (GET_SKILL(ch, skill_num) == 0) {
-    send_to_char(ch, "With the assistance of a few mind-altering chemicals and several blunt impacts, you completely forget %s.\r\n", skills[skill_num].name);
+    send_to_char(ch, "With the assistance of several blunt impacts, you completely forget %s.\r\n", skills[skill_num].name);
   } else {
-    send_to_char(ch, "With the assistance of a few mind-altering chemicals and several blunt impacts, you decrease your skill in %s.\r\n", skills[skill_num].name);
+    send_to_char(ch, "With the assistance of several blunt impacts, you decrease your skill in %s.\r\n", skills[skill_num].name);
   }
   
   return TRUE;
@@ -3950,4 +4088,152 @@ SPECIAL(chargen_skill_annex)
   }
   
   return FALSE;
+}
+
+SPECIAL(chargen_hopper)
+{
+  struct obj_data *hopper = (struct obj_data *) me;
+  struct obj_data *modulator = hopper->contains;
+  static char arg1[MAX_INPUT_LENGTH], arg2[MAX_INPUT_LENGTH];
+  char *arg1_ptr = arg1, *arg2_ptr = arg2;
+  
+  if (!ch || !cmd || IS_NPC(ch))
+    return FALSE;
+  
+  // Regardless of how or why we were called, this is a great chance to ensure the hopper has a mod in it.
+  if (!modulator) {
+    rnum_t modulator_rnum = real_object(OBJ_DOCWAGON_BASIC_MOD);
+    
+    // Cutout: If the modulator doesn't exist, fail.
+    if (modulator_rnum == NOWHERE) {
+      sprintf(buf, "SYSERR: Attempting to reference docwagon modulator at item %d, but that item does not exist.", OBJ_DOCWAGON_BASIC_MOD);
+      mudlog(buf, NULL, LOG_SYSLOG, TRUE);
+      return FALSE;
+    }
+    
+    modulator = read_object(modulator_rnum, REAL);
+    make_newbie(modulator);
+    obj_to_obj(modulator, hopper);
+    //mudlog("DEBUG: Loaded hopper with modulator.", NULL, LOG_SYSLOG, TRUE);
+  }
+  
+  if (CMD_IS("get")) {
+    // Clear our static argbufs.
+    memset(arg1, 0, sizeof(arg1));
+    memset(arg2, 0, sizeof(arg2));
+    
+    // Extract arguments from provided argument.
+    two_arguments(argument, arg1, arg2);
+    if (!*arg1 || !*arg2)
+      return FALSE;
+    
+    // Strip out the numbers for fewer shenanigans.
+    get_number(&arg1_ptr);
+    get_number(&arg2_ptr);
+    
+    // If the keyword they're using is valid for the hopper:
+    if ((isname(arg2, hopper->text.keywords) || isname(arg2, hopper->text.name) || strcmp(arg2, "all") == 0)
+        && (isname(arg1, modulator->text.keywords) || isname(arg1, modulator->text.name) || strcmp(arg1, "all") == 0)) {
+      struct obj_data *inv = NULL;
+      bool ch_already_has_one = FALSE;
+      
+      // Check their inventory to see if they have one already.
+      for (inv = ch->carrying; inv && !ch_already_has_one; inv = inv->next_content) {
+        if (GET_OBJ_VNUM(inv) == OBJ_DOCWAGON_BASIC_MOD)
+          ch_already_has_one = TRUE;
+        
+        // Recursively search into the object, just in case it's a container.
+        if (find_matching_obj_in_container(inv, OBJ_DOCWAGON_BASIC_MOD))
+          ch_already_has_one = TRUE;
+      }
+      
+      // Check their equipment to see if they have one already.
+      for (int i = 0; i < NUM_WEARS && !ch_already_has_one; i++) {
+        if ((inv = GET_EQ(ch, i)) && GET_OBJ_VNUM(inv) == OBJ_DOCWAGON_BASIC_MOD)
+          ch_already_has_one = TRUE;
+        
+        // Recursively search into the object, just in case it's a container.
+        if (find_matching_obj_in_container(inv, OBJ_DOCWAGON_BASIC_MOD))
+          ch_already_has_one = TRUE;
+      }
+      
+      if (ch_already_has_one) {
+        send_to_char("A shutter on the hopper closes as you reach for it, and a sign flashes, \"One per person.\"\r\n", ch);
+      } else {
+        send_to_char(ch, "You reach into the hopper and retrieve %s.\r\n", GET_OBJ_NAME(modulator));
+        obj_from_obj(modulator);
+        obj_to_char(modulator, ch);
+      }
+      
+      return TRUE;
+    }
+  }
+  
+  return FALSE;
+}
+
+// Build the exits of the room based on character's traditions.
+SPECIAL(chargen_career_archetype_paths)
+{
+  struct room_data *room = (struct room_data *) me;
+  struct room_data *temp_to_room = NULL;
+  
+  if (!ch || !cmd || IS_NPC(ch))
+    return FALSE;
+  
+  // Block non-mages from going east.
+  if ((CMD_IS("east") || CMD_IS("e")) && (GET_TRADITION(ch) != TRAD_HERMETIC && GET_TRADITION(ch) != TRAD_SHAMANIC)) {
+    send_to_char("You don't have the aptitude to choose the Path of the Magician.\r\n", ch);
+    return TRUE;
+  }
+  
+  // Block non-adepts from going south.
+  if ((CMD_IS("s") || CMD_IS("south")) && GET_TRADITION(ch) != TRAD_ADEPT) {
+    send_to_char("You don't have the aptitude to choose the Path of the Adept.\r\n", ch);
+    return TRUE;
+  }
+  
+  // Map the east exit to the correct branch of magic's path, then proceed.
+  
+  // Store the current exit, then overwrite with our custom one.
+  temp_to_room = room->dir_option[EAST]->to_room;
+  if (GET_TRADITION(ch) == TRAD_HERMETIC)
+    room->dir_option[EAST]->to_room = &world[real_room(RM_CHARGEN_PATH_OF_THE_MAGICIAN_HERMETIC)];
+  else
+    room->dir_option[EAST]->to_room = &world[real_room(RM_CHARGEN_PATH_OF_THE_MAGICIAN_SHAMANIC)];
+  
+  // Execute the actual command as normal. We know it'll always be cmd_info since you can't rig or mtx in chargen.
+  ((*cmd_info[cmd].command_pointer) (ch, argument, cmd, cmd_info[cmd].subcmd));
+  
+  // Restore the east exit for the room to the normal one.
+  room->dir_option[EAST]->to_room = temp_to_room;
+    
+  return TRUE;
+}
+
+// Build the exits of the room based on character's traditions.
+SPECIAL(chargen_spirit_combat_west)
+{
+  struct room_data *room = (struct room_data *) me;
+  struct room_data *temp_to_room = NULL;
+  
+  if (!ch || !cmd || IS_NPC(ch))
+    return FALSE;
+  
+  // Map the west exit to the correct branch of magic's path, then proceed.
+  
+  // Store the current exit, then overwrite with our custom one.
+  temp_to_room = room->dir_option[WEST]->to_room;
+  if (GET_TRADITION(ch) == TRAD_HERMETIC)
+    room->dir_option[WEST]->to_room = &world[real_room(RM_CHARGEN_CONJURING_HERMETIC)];
+  else
+    room->dir_option[WEST]->to_room = &world[real_room(RM_CHARGEN_CONJURING_SHAMANIC)];
+  
+  // Execute the actual command as normal. We know it'll always be cmd_info since you can't rig or mtx in chargen.
+  ((*cmd_info[cmd].command_pointer) (ch, argument, cmd, cmd_info[cmd].subcmd));
+  
+  // Restore the east exit for the room to the normal one.
+  room->dir_option[WEST]->to_room = temp_to_room;
+  
+  return TRUE;
 }

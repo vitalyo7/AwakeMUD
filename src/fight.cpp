@@ -1646,17 +1646,17 @@ void docwagon(struct char_data *ch)
   int i, creds;
   struct obj_data *docwagon = NULL;
   
-  if (IS_NPC(ch))
+  if (IS_NPC(ch) || PLR_FLAGGED(ch, PLR_AUTH))
     return;
   
   for (i = 0; (i < NUM_WEARS && !docwagon); i++)
-    if (GET_EQ(ch, i) && GET_OBJ_TYPE(GET_EQ(ch, i)) == ITEM_DOCWAGON && GET_OBJ_VAL(GET_EQ(ch, i), 1) == GET_IDNUM(ch))
+    if (GET_EQ(ch, i) && GET_OBJ_TYPE(GET_EQ(ch, i)) == ITEM_DOCWAGON && GET_DOCWAGON_BONDED_IDNUM(GET_EQ(ch, i)) == GET_IDNUM(ch))
       docwagon = GET_EQ(ch, i);
   
-  if (!docwagon || PLR_FLAGGED(ch, PLR_AUTH))
+  if (!docwagon)
     return;
   
-  if (success_test(GET_OBJ_VAL(docwagon, 0),
+  if (success_test(GET_DOCWAGON_CONTRACT_GRADE(docwagon) + 1,
                    MAX(GET_SECURITY_LEVEL(ch->in_room), 4)) > 0)
   {
     if (FIGHTING(ch) && FIGHTING(FIGHTING(ch)) == ch)
@@ -1722,7 +1722,7 @@ void docwagon(struct char_data *ch)
     }
     char_from_room(ch);
     char_to_room(ch, &world[i]);
-    creds = MAX((number(8, 12) * 500 / GET_OBJ_VAL(docwagon, 0)), (int)(GET_NUYEN(ch) / 10));
+    creds = MAX((number(8, 12) * 500 / GET_DOCWAGON_CONTRACT_GRADE(docwagon)), (int)(GET_NUYEN(ch) / 10));
     send_to_char(ch, "DocWagon demands %d nuyen for your rescue.\r\n", creds);
     if ((GET_NUYEN(ch) + GET_BANK(ch)) < creds) {
       send_to_char("Not finding sufficient payment, your DocWagon contract was retracted.\r\n", ch);
@@ -3271,8 +3271,14 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
   char rbuf[MAX_STRING_LENGTH];
   bool melee = FALSE;
   
+  // Precondition: If you're wielding a non-weapon, back out.
+  if (att->weapon && GET_OBJ_TYPE(att->weapon) != ITEM_WEAPON) {
+    send_to_char(att->ch, "You struggle to figure out how to attack while using %s as a weapon!\r\n", decapitalize_a_an(GET_OBJ_NAME(att->weapon)));
+    return;
+  }
+  
   // Precondition: If you're asleep, paralyzed, or out of ammo, you don't get to fight. TODO: How to handle characters wielding non-weapons?
-  if (!AWAKE(att->ch) || GET_QUI(att->ch) <= 0 || !has_ammo(att->ch, att->weapon) || (att->weapon && GET_OBJ_TYPE(att->weapon) != ITEM_WEAPON))
+  if (!AWAKE(att->ch) || GET_QUI(att->ch) <= 0 || !has_ammo(att->ch, att->weapon))
     return;
   
   // Precondition: If your foe is astral, you don't belong here.
@@ -3644,6 +3650,11 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
       net_successes = att->successes;
     }
     
+    if (def->weapon ? GET_OBJ_TYPE(def->weapon) != ITEM_WEAPON : FALSE) {
+      // Defender's wielding a non-weapon? Whoops, net successes will never be less than 0.
+      net_successes = MAX(0, net_successes);
+    }
+    
     act("$n clashes with $N in melee combat.", FALSE, att->ch, 0, def->ch, TO_ROOM);
     act("You clash with $N in melee combat.", FALSE, att->ch, 0, def->ch, TO_CHAR);
     sprintf(rbuf, "%s> sk %d targ %d\r\n"
@@ -3654,11 +3665,10 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
     
     // If your enemy got more successes than you, guess what? You're the one who gets their face caved in.
     if (net_successes < 0) {
-      /* This messaging gets a little annoying.
+      // This messaging gets a little annoying.
       act("You successfully counter $N's attack!", FALSE, def->ch, 0, att->ch, TO_CHAR);
       act("$n deflects your attack and counterstrikes!", FALSE, def->ch, 0, att->ch, TO_VICT);
       act("$n deflects $N's attack and counterstrikes!", FALSE, def->ch, 0, att->ch, TO_NOTVICT);
-      */
       struct combat_data *temp_cd = att;
       att = def;
       def = temp_cd;
@@ -4265,7 +4275,11 @@ void range_combat(struct char_data *ch, char *target, struct obj_data *weapon,
       }
       if (CH_IN_COMBAT(ch))
         stop_fighting(ch);
-      hit(ch, vict, (GET_EQ(ch, WEAR_WIELD) ? GET_EQ(ch, WEAR_WIELD) : GET_EQ(ch, WEAR_HOLD)), (GET_EQ(vict, WEAR_WIELD) ? GET_EQ(vict, WEAR_WIELD) : GET_EQ(vict, WEAR_HOLD)));
+      hit(ch,
+          vict,
+          (GET_EQ(ch, WEAR_WIELD) ? GET_EQ(ch, WEAR_WIELD) : GET_EQ(ch, WEAR_HOLD)),
+          (GET_EQ(vict, WEAR_WIELD) ? GET_EQ(vict, WEAR_WIELD) : GET_EQ(vict, WEAR_HOLD))
+          );
       WAIT_STATE(ch, 2 * PULSE_VIOLENCE);
       return;
     }
@@ -4282,7 +4296,11 @@ void range_combat(struct char_data *ch, char *target, struct obj_data *weapon,
         }
         if (CH_IN_COMBAT(ch))
           stop_fighting(ch);
-        hit(ch, vict, (GET_EQ(ch, WEAR_WIELD) ? GET_EQ(ch, WEAR_WIELD) : GET_EQ(ch, WEAR_HOLD)), (GET_EQ(vict, WEAR_WIELD) ? GET_EQ(vict, WEAR_WIELD) : GET_EQ(vict, WEAR_HOLD)));
+        hit(ch,
+            vict,
+            (GET_EQ(ch, WEAR_WIELD) ? GET_EQ(ch, WEAR_WIELD) : GET_EQ(ch, WEAR_HOLD)),
+            (GET_EQ(vict, WEAR_WIELD) ? GET_EQ(vict, WEAR_WIELD) : GET_EQ(vict, WEAR_HOLD))
+            );
         ranged_response(ch, vict);
       } else
         send_to_char("*Click*\r\n", ch);
@@ -4709,7 +4727,7 @@ void perform_violence(void)
         if ((veh && veh->in_room)
             || (FIGHTING(ch) && veh->in_room != FIGHTING(ch)->in_room)
             || (FIGHTING_VEH(ch) && veh->in_room != FIGHTING_VEH(ch)->in_room)) {
-          send_to_char("Your target has left your line of sight.", ch);
+          send_to_char("Your target has left your line of sight.\r\n", ch);
           stop_fighting(ch);
           continue;
         }
@@ -4721,10 +4739,17 @@ void perform_violence(void)
         else
           vcombat(ch, FIGHTING_VEH(ch));
       } else {
-        hit(ch, FIGHTING(ch), (GET_EQ(ch, WEAR_WIELD) ? GET_EQ(ch, WEAR_WIELD) : GET_EQ(ch, WEAR_HOLD)),
-            (GET_EQ(FIGHTING(ch), WEAR_WIELD) ? GET_EQ(FIGHTING(ch), WEAR_WIELD) : GET_EQ(FIGHTING(ch), WEAR_HOLD)));
+        hit(ch,
+            FIGHTING(ch),
+            GET_EQ(ch, WEAR_WIELD) ? GET_EQ(ch, WEAR_WIELD) : GET_EQ(ch, WEAR_HOLD),
+            GET_EQ(FIGHTING(ch), WEAR_WIELD) ? GET_EQ(FIGHTING(ch), WEAR_WIELD) : GET_EQ(FIGHTING(ch), WEAR_HOLD)
+            );
         if (GET_EQ(ch, WEAR_WIELD) && GET_EQ(ch, WEAR_HOLD) && FIGHTING(ch))
-          hit(ch, FIGHTING(ch), GET_EQ(ch, WEAR_HOLD), GET_EQ(FIGHTING(ch), WEAR_WIELD));
+          hit(ch,
+              FIGHTING(ch),
+              GET_EQ(ch, WEAR_HOLD),
+              GET_EQ(FIGHTING(ch), WEAR_WIELD) ? GET_EQ(FIGHTING(ch), WEAR_WIELD) : GET_EQ(FIGHTING(ch), WEAR_HOLD)
+              );
       }
       
       if (MOB_FLAGGED(ch, MOB_SPEC) &&

@@ -28,6 +28,8 @@
 #include "constants.h"
 #include "newmatrix.h"
 #include "config.h"
+#include "helpedit.h"
+#include "newdb.h"
 
 extern class objList ObjList;
 extern sh_int mortal_start_room;
@@ -50,9 +52,6 @@ extern void zedit_disp_data_menu(struct descriptor_data *d);
 extern void vedit_disp_menu(struct descriptor_data * d);
 extern void hedit_disp_data_menu(struct descriptor_data *d);
 extern void icedit_disp_menu(struct descriptor_data *d);
-
-extern MYSQL *mysql;
-extern int mysql_wrapper(MYSQL *mysql, const char *query);
 
 // mem class
 extern class memoryClass *Mem;
@@ -1416,7 +1415,7 @@ ACMD(do_mclone)
   if (mob_proto[mob_num1].char_specials.arrive)
     mob->char_specials.arrive = str_dup(mob_proto[mob_num1].char_specials.arrive);
   if (mob_proto[mob_num1].char_specials.leave)
-    mob->char_specials.arrive = str_dup(mob_proto[mob_num1].char_specials.leave);
+    mob->char_specials.leave = str_dup(mob_proto[mob_num1].char_specials.leave);
 
   if (mob_proto[mob_num1].player_specials)
     mob->player_specials = &dummy_mob;
@@ -1432,7 +1431,7 @@ ACMD(do_mclone)
 
 ACMD(do_mdelete)
 {
-  int num, c, counter, found = 0;
+  int num, counter, found = 0;
 
   one_argument(argument, buf);
 
@@ -1476,6 +1475,13 @@ ACMD(do_mdelete)
 
   ch->player_specials->saved.zonenum = zone_table[counter].number;
   num = real_mobile(num);
+  
+  if (num < 0) {
+    send_to_char("No such mob.\r\n", ch);
+    return;
+  } else {
+    sprintf(buf3, "NPC '%s' (%ld) deleted.\r\n", GET_NAME(&mob_proto[num]), GET_MOB_VNUM(&mob_proto[num]));
+  }
 
   struct char_data *j, *temp, *next_char;
   /* cycle through characters, purging soon-to-be-delete mobs as we go */
@@ -1490,61 +1496,61 @@ ACMD(do_mdelete)
   Mem->DeleteCh(&mob_proto[num]);
 
   for (counter = num; counter < top_of_mobt; counter++) {
-    for (j = character_list; j; j = j->next) {
-      if (j->nr == counter) {
-        temp = new char_data;
-        *temp = *j;
-        *j = mob_proto[counter + 1];
-        j->in_room = temp->in_room;
-        j->nr = counter;
-        j->carrying = temp->carrying;
-        for (c = 0; c < NUM_WEARS; c++)
-          j->equipment[c] = temp->equipment[c];
-        j->next_in_room = temp->next_in_room;
-        j->next = temp->next;
-        Mem->ClearCh(temp);
-      }
-    }
     mob_index[counter] = mob_index[counter + 1];
     mob_proto[counter] = mob_proto[counter + 1];
     mob_proto[counter].nr = counter;
+    
+    for (j = character_list; j; j = j->next) {
+      if (IS_NPC(j) && j->nr == counter) {
+        temp = Mem->GetCh();
+        *temp = *j;
+        *j = mob_proto[counter];
+        j->nr = counter;
+        copy_over_necessary_info(temp, j);
+        Mem->ClearCh(temp);
+      }
+    }
   }
+  // Wipe out the top entry of the table (it's not needed), then shrink the table.
+  memset(&mob_proto[top_of_mobt], 0, sizeof(struct char_data));
+  memset(&mob_index[top_of_mobt], 0, sizeof(struct index_data));
+  top_of_mobt--;
 
   // update the zones by decrementing numbers if >= number deleted
   int zone, cmd_no, last = 0;
   for (zone = 0; zone <= top_of_zone_table; zone++) {
     for (cmd_no = 0; cmd_no < zone_table[zone].num_cmds; cmd_no++)
       switch (ZCMD.command) {
-      case 'M':
-        last = ZCMD.arg1;
-        if (ZCMD.arg1 == num) {
-          ZCMD.command = '*';
-          ZCMD.if_flag = 0;
-          ZCMD.arg1 = 0;
-          ZCMD.arg2 = 0;
-          ZCMD.arg3 = 0;
-        } else
-          ZCMD.arg1 = (ZCMD.arg1 > num ? ZCMD.arg1 - 1 : ZCMD.arg1);
-        break;
-      case 'E':
-      case 'G':
-      case 'C':
-      case 'N':
-        if (last == num) {
-          ZCMD.command = '*';
-          ZCMD.if_flag = 0;
-          ZCMD.arg1 = 0;
-          ZCMD.arg2 = 0;
-          ZCMD.arg3 = 0;
-        }
-        break;
+        case 'S':
+        case 'M':
+          last = ZCMD.arg1;
+          if (ZCMD.arg1 == num) {
+            ZCMD.command = '*';
+            ZCMD.if_flag = 0;
+            ZCMD.arg1 = 0;
+            ZCMD.arg2 = 0;
+            ZCMD.arg3 = 0;
+          } else
+            ZCMD.arg1 = (ZCMD.arg1 > num ? ZCMD.arg1 - 1 : ZCMD.arg1);
+          break;
+        case 'E':
+        case 'G':
+        case 'C':
+        case 'N':
+          if (last == num) {
+            ZCMD.command = '*';
+            ZCMD.if_flag = 0;
+            ZCMD.arg1 = 0;
+            ZCMD.arg2 = 0;
+            ZCMD.arg3 = 0;
+          }
+          break;
       }
   }
 
-  top_of_mobt--;
   write_zone_to_disk(ch->player_specials->saved.zonenum);
   write_mobs_to_disk(ch->player_specials->saved.zonenum);
-  send_to_char("Done.\r\n", ch);
+  send_to_char(buf3, ch);
 }
 
 ACMD(do_qedit)

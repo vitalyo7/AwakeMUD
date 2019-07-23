@@ -13,7 +13,6 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
-#include <mysql/mysql.h>
 
 #include "structs.h"
 #include "awake.h"
@@ -30,12 +29,14 @@
 #include "newmatrix.h"
 #include "constants.h"
 #include "newdb.h"
+#include "helpedit.h"
+
+#define DO_FORMAT_INDENT   1
+#define DONT_FORMAT_INDENT 0
 
 void show_string(struct descriptor_data *d, char *input);
 void qedit_disp_menu(struct descriptor_data *d);
 
-extern MYSQL *mysql;
-extern int mysql_wrapper(MYSQL *mysql, const char *query);
 /* ************************************************************************
 *  modification of malloc'ed strings                                      *
 ************************************************************************ */
@@ -75,13 +76,16 @@ void format_string(struct descriptor_data *d, int indent)
   for (i = 0; (*d->str)[i]; i++)
     while ((*d->str)[i] == '\r' || (*d->str)[i] == '\n')
     {
+      // convert '\n[^\r]' to ' [^\r]'
       if ((*d->str)[i] == '\n' && (*d->str)[i+1] != '\r')
         (*d->str)[i] = ' ';
+      // delete the first character of patterns '\n\r' '\r.*'
       else
         for (j = i; (*d->str)[j]; j++)
           (*d->str)[j] = (*d->str)[j+1];
+      // if pattern was '\n\r' or '\r\r' then
       if ((*d->str)[i] == '\r') {
-        i += 2;
+        i += 2; // leave it in place-- it's an official newline character
         if (indent && add_spaces(*d->str, d->max_str, i, 3)) {
           (*d->str)[i] = (*d->str)[i+1] = (*d->str)[i+2] = ' ';
           while ((*d->str)[i+3] == ' ')
@@ -107,25 +111,14 @@ void format_string(struct descriptor_data *d, int indent)
     line = 78;
     for (i = k, j = 0; format[i] && j < 79; i++)
       if (format[i] == '^' && (i < 1 || format[i-1] != '^') && format[i+1]) {
-        switch (LOWER(format[i+1])) {
-        case 'b':
-        case 'c':
-        case 'g':
-        case 'l':
-        case 'm':
-        case 'n':
-        case 'r':
-        case 'w':
-        case 'y':
+        // Look for color code initializers; if they exist, bump the line count longer.
+        if (strchr((const char *)"nrgybmcwajeloptv", LOWER(format[i+1]))) {
           line += 2;
-          break;
-        case '^':
+        } else if (format[i+1] == '^') {
           line++;
           j++;
-          break;
-        default:
+        } else {
           j += 2;
-          break;
         }
       } else
         j++;
@@ -225,12 +218,18 @@ void string_add(struct descriptor_data *d, char *str)
     extern void pocketsec_mailmenu(struct descriptor_data *d);
     extern void pocketsec_notemenu(struct descriptor_data *d);
     
-#define REPLACE_STRING(target) {    \
-  DELETE_ARRAY_IF_EXTANT((target)); \
-  format_string(d, 0);              \
-  (target) = str_dup(*d->str);      \
-  DELETE_D_STR_IF_EXTANT(d);  \
+// REPLACE_STRING swaps target with d->str if d->str exists (otherwise leaves target alone).
+#define REPLACE_STRING_FORMAT_SPECIFIED(target, format_bit) { \
+  if ((d->str)) {                                             \
+    DELETE_ARRAY_IF_EXTANT((target));                         \
+    format_string(d, (format_bit));                           \
+    (target) = str_dup(*d->str);                              \
+    DELETE_D_STR_IF_EXTANT(d);                                \
+  }                                                           \
 }
+    
+#define REPLACE_STRING(target) (REPLACE_STRING_FORMAT_SPECIFIED(target, DONT_FORMAT_INDENT))
+#define REPLACE_STRING_WITH_INDENTED_FORMATTING(target) (REPLACE_STRING_FORMAT_SPECIFIED(target, DO_FORMAT_INDENT))
 
     if (STATE(d) == CON_DECK_CREATE && d->edit_mode == 1) {
       REPLACE_STRING(d->edit_obj->photo);
@@ -251,13 +250,13 @@ void string_add(struct descriptor_data *d, char *str)
     } else if (STATE(d) == CON_SPELL_CREATE && d->edit_mode == 3) {
       REPLACE_STRING(d->edit_obj->photo);
       spedit_disp_menu(d);
+    } else if (STATE(d) == CON_HELPEDIT) {
+      REPLACE_STRING(d->edit_helpfile->body);
+      helpedit_disp_menu(d);
     } else if (STATE(d) == CON_IEDIT) {
       switch(d->edit_mode) {
         case IEDIT_EXTRADESC_DESCRIPTION:
-          DELETE_ARRAY_IF_EXTANT(((struct extra_descr_data *)*d->misc_data)->description);
-          format_string(d, 0);
-          ((struct extra_descr_data *)*d->misc_data)->description = str_dup(*d->str);
-          DELETE_D_STR_IF_EXTANT(d);
+          REPLACE_STRING(((struct extra_descr_data *)*d->misc_data)->description);
           iedit_disp_extradesc_menu(d);
           break;
         case IEDIT_LONGDESC:
@@ -308,24 +307,22 @@ void string_add(struct descriptor_data *d, char *str)
     } else if (STATE(d) == CON_REDIT) {
       switch(d->edit_mode) {
       case REDIT_DESC:
-        REPLACE_STRING(d->edit_room->description);
+        REPLACE_STRING_WITH_INDENTED_FORMATTING(d->edit_room->description);
         redit_disp_menu(d);
         break;
       case REDIT_NDESC:
-        DELETE_ARRAY_IF_EXTANT(d->edit_room->night_desc);
-        format_string(d, 1);
-        if (strlen(*d->str) > 5) {
-          d->edit_room->night_desc = str_dup(*d->str);
-        } else
-          d->edit_room->night_desc = NULL;
-        DELETE_D_STR_IF_EXTANT(d);
+          DELETE_ARRAY_IF_EXTANT(d->edit_room->night_desc);
+          if (d->str && *d->str) {
+            if (strlen(*d->str) > 5)
+              REPLACE_STRING_WITH_INDENTED_FORMATTING(d->edit_room->night_desc);
+            else
+              d->edit_room->night_desc = NULL;
+          }
+          DELETE_D_STR_IF_EXTANT(d);
         redit_disp_menu(d);
         break;
       case REDIT_EXTRADESC_DESCRIPTION:
-        DELETE_ARRAY_IF_EXTANT(((struct extra_descr_data *)*d->misc_data)->description);
-        format_string(d, 0);
-        ((struct extra_descr_data *)*d->misc_data)->description = str_dup(*d->str);
-        DELETE_D_STR_IF_EXTANT(d);
+        REPLACE_STRING(((struct extra_descr_data *)*d->misc_data)->description);
         redit_disp_extradesc_menu(d);
         break;
       case REDIT_EXIT_DESCRIPTION:
@@ -453,8 +450,11 @@ void string_add(struct descriptor_data *d, char *str)
 
     if (!d->connected && d->character && !IS_NPC(d->character))
       PLR_FLAGS(d->character).RemoveBit(PLR_WRITING);
-  } else
-    strcat(*d->str, "\r\n");
+  } else {
+    // Only add a newline if it's not just /**/ with nothing else in it.
+    if (strcmp(*d->str, "/**/") != 0)
+      strcat(*d->str, "\r\n");
+  }
 }
 
 
@@ -630,7 +630,7 @@ ACMD(do_skillset)
       if (*skills[i].name == '!')
         continue;
       sprintf(help + strlen(help), "%18s", skills[i].name);
-      if (i % 4 == 3) {
+      if (i % 4 == 3 || PRF_FLAGGED(ch, PRF_SCREENREADER)) {
         strcat(help, "\r\n");
         send_to_char(help, ch);
         *help = '\0';
@@ -683,8 +683,8 @@ ACMD(do_skillset)
     send_to_char("Minimum value for learned is 0.\r\n", ch);
     return;
   }
-  if (value > 100) {
-    send_to_char("Max value for learned is 100.\r\n", ch);
+  if (value > MAX_SKILL_LEVEL_FOR_IMMS) {
+    send_to_char(ch, "Max value for learned is %d.\r\n", MAX_SKILL_LEVEL_FOR_IMMS);
     return;
   }
   if (IS_NPC(vict)) {
@@ -696,13 +696,13 @@ ACMD(do_skillset)
           skills[skill].name,
           GET_SKILL(vict, skill), value);
   mudlog(buf2, ch, LOG_WIZLOG, TRUE);
-
-  SET_SKILL(vict, skill, value);
+  
+  send_to_char(vict, "Your skill in %s has been altered by the game's administration.\r\n", skills[skill].name);
+  
+  set_character_skill(vict, skill, value, TRUE);
 
   sprintf(buf2, "You change %s's %s to %d.\r\n", GET_NAME(vict), skills[skill].name, value);
   send_to_char(buf2, ch);
-
-  GET_SKILL_DIRTY_BIT(vict) = TRUE;
 }
 
 
