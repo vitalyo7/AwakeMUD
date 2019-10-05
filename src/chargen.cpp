@@ -15,7 +15,6 @@
 #include "awake.h"
 #include "constants.h"
 #include "config.h"
-#include "chargen.h"
 
 #define CH d->character
 
@@ -24,32 +23,6 @@ extern int mysql_wrapper(MYSQL *mysql, const char *buf);
 extern void display_help(char *help, const char *arg);
 
 int get_minimum_attribute_points_for_race(int race);
-void _imp_create_parse(struct descriptor_data *d, const char *arg);
-
-/* chargen connected modes */
-
-
-enum chargen_states {
-  CCR_AWAIT_CR =   -1,
-  CCR_SEX,
-  CCR_RACE,
-  CCR_TOTEM,
-  CCR_PRIORITY,
-  CCR_ASSIGN,
-  CCR_TRADITION,
-  CCR_ASPECT,
-  CCR_TOTEM2,
-  CCR_TYPE,
-  CCR_POINTS,
-  CCR_PO_ATTR,
-  CCR_PO_SKILL,
-  CCR_PO_RESOURCES,
-  CCR_PO_MAGIC
-};
-
-
-// Initialize singleton
-Chargen chargenHandler;
 
 const char *pc_race_types[] =
   {
@@ -78,6 +51,28 @@ const char *pc_race_types[] =
     "Spirit",
     "\n"
   };
+
+const char *race_menu =
+  "\r\nSelect a race:\r\n"
+  "  [1] Human\r\n"
+  "  [2] Dwarf\r\n"
+  "  [3] Elf\r\n"
+  "  [4] Ork\r\n"
+  "  [5] Troll\r\n"
+  "  [6] Cyclops\r\n"
+  "  [7] Koborokuru\r\n"
+  "  [8] Fomori\r\n"
+  "  [9] Menehune\r\n"
+  "  [A] Hobgoblin\r\n"
+  "  [B] Giant\r\n"
+  "  [C] Gnome\r\n"
+  "  [D] Oni\r\n"
+  "  [E] Wakyambi\r\n"
+  "  [F] Ogre\r\n"
+  "  [G] Minotaur\r\n"
+  "  [H] Satyr\r\n"
+  "  [I] Night-One\r\n"
+  "  ?# (for help on a particular race)\r\n";
 
 const char *assign_menu =
   "\r\nSelect a priority to assign:\r\n"
@@ -131,7 +126,114 @@ void init_create_vars(struct descriptor_data *d)
   d->ccr.temp = 0;
 }
 
-
+int parse_race(struct descriptor_data *d, const char *arg)
+{
+  switch (LOWER(*arg))
+  {
+  case '1':
+    return RACE_HUMAN;
+  case '2':
+    return RACE_DWARF;
+  case '3':
+    return RACE_ELF;
+  case '4':
+    return RACE_ORK;
+  case '5':
+    return RACE_TROLL;
+  case '6':
+    return RACE_CYCLOPS;
+  case '7':
+    return RACE_KOBOROKURU;
+  case '8':
+    return RACE_FOMORI;
+  case '9':
+    return RACE_MENEHUNE;
+  case 'a':
+    return RACE_HOBGOBLIN;
+  case 'b':
+    return RACE_GIANT;
+  case 'c':
+    return RACE_GNOME;
+  case 'd':
+    return RACE_ONI;
+  case 'e':
+    return RACE_WAKYAMBI;
+  case 'f':
+    return RACE_OGRE;
+  case 'g':
+    return RACE_MINOTAUR;
+  case 'h':
+    return RACE_SATYR;
+  case 'i':
+    return RACE_NIGHTONE;
+  case '?':
+    switch (LOWER(*(arg+1))) {
+    case '1':
+      display_help(buf2, "human");
+      break;
+    case '2':
+      display_help(buf2, "dwarf");
+      break;
+    case '3':
+      display_help(buf2, "elf");
+      break;
+    case '4':
+      display_help(buf2, "ork");
+      break;
+    case '5':
+      display_help(buf2, "troll");
+      break;
+    case '6':
+      display_help(buf2, "cyclops");
+      break;
+    case '7':
+      display_help(buf2, "koborokuru");
+      break;
+    case '8':
+      display_help(buf2, "fomori");
+      break;
+    case '9':
+      display_help(buf2, "menehune");
+      break;
+    case 'a':
+      display_help(buf2, "hobgoblin");
+      break;
+    case 'b':
+      display_help(buf2, "giant");
+      break;
+    case 'c':
+      display_help(buf2, "gnome");
+      break;
+    case 'd':
+      display_help(buf2, "oni");
+      break;
+    case 'e':
+      display_help(buf2, "wakyambi");
+      break;
+    case 'f':
+      display_help(buf2, "ogre");
+      break;
+    case 'g':
+      display_help(buf2, "minotaur");
+      break;
+    case 'h':
+      display_help(buf2, "satyr");
+      break;
+    case 'i':
+      display_help(buf2, "night one");
+      break;
+    default:
+      return RACE_UNDEFINED;
+    }
+    strcat(buf2, "\r\n Press [return] to continue");
+    SEND_TO_Q(buf2, d);
+    d->ccr.temp = CCR_RACE;
+    d->ccr.mode = CCR_AWAIT_CR;
+    return RETURN_HELP;
+  default:
+    return RACE_UNDEFINED;
+  }
+}
 
 bool valid_totem(struct char_data *ch, int i)
 {
@@ -154,7 +256,7 @@ int parse_totem(struct descriptor_data *d, const char *arg)
   if (*temp == '?')
   {
     i = atoi(++temp);
-    display_help(buf2, (char *)totem_types[i]);
+    display_help(buf2, totem_types[i]);
     strcat(buf2, "\r\n Press [return] to continue ");
     SEND_TO_Q(buf2, d);
     d->ccr.temp = CCR_TOTEM;
@@ -447,7 +549,14 @@ void ccr_aspect_menu(struct descriptor_data *d)
   d->ccr.mode = CCR_ASPECT;
 }
 
-
+void ccr_type_menu(struct descriptor_data *d)
+{
+  SEND_TO_Q("\r\nSelect Type of Character Creation:\r\n"
+            "  [1] Priority Based (Easy)\r\n"
+            "  [2] Points Based   (Advanced)\r\n"
+            "Enter creation method: ", d);
+  d->ccr.mode = CCR_TYPE;
+}
 
 void points_menu(struct descriptor_data *d)
 {
@@ -491,7 +600,7 @@ int get_maximum_attribute_points_for_race(int race) {
   return amount;
 }
 
-void _imp_create_parse(struct descriptor_data *d, const char *arg)
+void create_parse(struct descriptor_data *d, const char *arg)
 {
   int i = MIN(120, atoi(arg)), ok;
   int minimum_attribute_points, maximum_attribute_points, available_attribute_points;
@@ -648,10 +757,62 @@ void _imp_create_parse(struct descriptor_data *d, const char *arg)
     }
     break;
   case CCR_TYPE:
-   // moved
+    switch (*arg) {
+      case '1':
+        priority_menu(d);
+        d->ccr.mode = CCR_PRIORITY;
+        break;
+      case '2':
+        d->ccr.points = 120;
+        
+        // Assign racial minimums and subtract them from the point value.
+        d->ccr.pr[PO_ATTR] = get_minimum_attribute_points_for_race(GET_RACE(CH)) * 2;
+        d->ccr.points -= d->ccr.pr[PO_ATTR];
+        
+        d->ccr.pr[PO_SKILL] = 0;
+        d->ccr.pr[PO_RESOURCES] = 1;
+        d->ccr.pr[PO_MAGIC] = 0;
+        
+        // Assign racial costs and subtract them from the point value.
+        switch (GET_RACE(CH)) {
+          case RACE_HUMAN:
+            d->ccr.pr[PO_RACE] = 0;
+            break;
+          case RACE_DWARF:
+          case RACE_ORK:
+            d->ccr.pr[PO_RACE] = 5;
+            break;
+          case RACE_OGRE:
+          case RACE_HOBGOBLIN:
+          case RACE_GNOME:
+          case RACE_ONI:
+          case RACE_SATYR:
+          case RACE_KOBOROKURU:
+          case RACE_TROLL:
+          case RACE_ELF:
+            d->ccr.pr[PO_RACE] = 10;
+            break;
+          case RACE_CYCLOPS:
+          case RACE_FOMORI:
+          case RACE_GIANT:
+          case RACE_MINOTAUR:
+          case RACE_MENEHUNE:
+          case RACE_NIGHTONE:
+          case RACE_WAKYAMBI:
+            d->ccr.pr[PO_RACE] = 15;
+            break;
+        }
+        d->ccr.points -= d->ccr.pr[PO_RACE];
+        d->ccr.pr[5] = -1;
+        
+        points_menu(d);
+        break;
+      default:
+        ccr_type_menu(d);
+        break;
+    }
     break;
   case CCR_AWAIT_CR:
-	  /*
     d->ccr.mode = d->ccr.temp;
     d->ccr.temp = 0;
     switch (d->ccr.mode) {
@@ -669,12 +830,91 @@ void _imp_create_parse(struct descriptor_data *d, const char *arg)
       log("Invalid mode in AWAIT_CR in chargen.");
     }
     break;
-    */
   case CCR_SEX:
-	// Moved
+    switch (*arg) {
+    case 'm':
+    case 'M':
+      d->character->player.sex = SEX_MALE;
+      break;
+    case 'f':
+    case 'F':
+      d->character->player.sex = SEX_FEMALE;
+      break;
+    case 'o':
+    case 'O':
+      d->character->player.sex = SEX_NEUTRAL;
+      break;
+    default:
+      SEND_TO_Q("That is not a sex..\r\nWhat IS your sex? ", d);
+      return;
+    }
+    SEND_TO_Q(race_menu, d);
+    SEND_TO_Q("\r\nRace: ", d);
+    d->ccr.mode = CCR_RACE;
     break;
   case CCR_RACE:
-   // moved;
+    if ((GET_RACE(d->character) = parse_race(d, arg)) == RACE_UNDEFINED) {
+      SEND_TO_Q("\r\nThat's not a race.\r\nRace: ", d);
+      return;
+    } else if (GET_RACE(d->character) == RETURN_HELP) // for when they use help
+      return;
+
+    if (GET_RACE(d->character) == RACE_DRAGON)
+      d->ccr.pr[0] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_HUMAN)
+      d->ccr.pr[4] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_DWARF)
+      d->ccr.pr[3] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_ORK)
+      d->ccr.pr[3] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_TROLL)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_ELF)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_CYCLOPS)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_KOBOROKURU)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_FOMORI)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_MENEHUNE)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_HOBGOBLIN)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_GIANT)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_GNOME)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_ONI)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_WAKYAMBI)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_OGRE)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_MINOTAUR)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_SATYR)
+      d->ccr.pr[2] = PR_RACE;
+    else if (GET_RACE(d->character) == RACE_NIGHTONE)
+      d->ccr.pr[2] = PR_RACE;
+    
+    if (real_object(OBJ_MAP_OF_SEATTLE) > -1)
+      obj_to_char(read_object(OBJ_MAP_OF_SEATTLE, VIRTUAL), d->character);
+    GET_EQ(d->character, WEAR_BODY) = read_object(shirts[number(0, 4)], VIRTUAL);
+    GET_EQ(d->character, WEAR_LEGS) = read_object(pants[number(0, 4)], VIRTUAL);
+    GET_EQ(d->character, WEAR_FEET) = read_object(shoes[number(0, 4)], VIRTUAL);
+    // Check to see if the radio exists (real_object() returns -1 if it can't find an object with this vnum).
+    if (real_object(60531) > -1) {
+      // Read the radio into a temporary object pointer so we can reference it.
+      struct obj_data *radio = read_object(60531, VIRTUAL);
+        
+      // Set the channel to 8 MHz.
+      GET_OBJ_VAL(radio, 0) = 8;
+        
+      // Give the radio to the character via the radio pointer.
+      obj_to_char(radio, d->character);
+    }
+    ccr_type_menu(d);
     break;
   case CCR_TOTEM:
     if ((i = parse_totem(d, arg)) == TOTEM_UNDEFINED) {
@@ -1048,342 +1288,3 @@ void _imp_create_parse(struct descriptor_data *d, const char *arg)
     break;
   }
 }
-
-
-void changeChargenState(struct descriptor_data *d, Fsm *fsm, int state) {
-	d->ccr.mode = state;
-	fsm->transitionTo(state, d);
-}
-
-//
-// State : Sex selection
-//
-FSM_STATE(view_sex_selection) {
-	SEND_TO_Q("That is not a sex..\r\nWhat IS your sex? ", d);
-}
-
-FSM_INPUT(parse_sex_selection) {
-	switch (LOWER(*arg)) {
-		case 'm':
-		  d->character->player.sex = SEX_MALE;
-		  changeChargenState(d, fsm, CCR_RACE);
-		  break;
-		case 'f':
-		  d->character->player.sex = SEX_FEMALE;
-		  changeChargenState(d, fsm, CCR_RACE);
-		  break;
-		default:
-			changeChargenState(d, fsm, CCR_SEX);
-		  return;
-    }
-}
-
-//
-// State : Race selection
-//
-FSM_STATE(view_race_selection)
-{
-	SEND_TO_Q("\r\nSelect a race:\r\n"
-			  "  [1] Human\r\n"
-			  "  [2] Dwarf\r\n"
-			  "  [3] Elf\r\n"
-			  "  [4] Ork\r\n"
-			  "  [5] Troll\r\n"
-			  "  [6] Cyclops\r\n"
-			  "  [7] Koborokuru\r\n"
-			  "  [8] Fomori\r\n"
-			  "  [9] Menehune\r\n"
-			  "  [A] Hobgoblin\r\n"
-			  "  [B] Giant\r\n"
-			  "  [C] Gnome\r\n"
-			  "  [D] Oni\r\n"
-			  "  [E] Wakyambi\r\n"
-			  "  [F] Ogre\r\n"
-			  "  [G] Minotaur\r\n"
-			  "  [H] Satyr\r\n"
-			  "  [I] Night-One\r\n"
-			  "  ?# (for help on a particular race)\r\n", d);
-	SEND_TO_Q("\r\nRace: ", d);
-}
-
-FSM_INPUT(parse_race_selection) {
-
-	// Set the race to undefined initially
-	GET_RACE(d->character) = RACE_UNDEFINED;
-
-	switch (LOWER(*arg)) {
-		case '1':
-			GET_RACE(d->character) = RACE_HUMAN;
-		    d->ccr.pr[4] = PR_RACE;
-	    break;
-
-	    /*
-		  case '2':
-			return RACE_DWARF;
-		  case '3':
-			return RACE_ELF;
-		  case '4':
-			return RACE_ORK;
-		  case '5':
-			return RACE_TROLL;
-		  case '6':
-			return RACE_CYCLOPS;
-		  case '7':
-			return RACE_KOBOROKURU;
-		  case '8':
-			return RACE_FOMORI;
-		  case '9':
-			return RACE_MENEHUNE;
-		  case 'a':
-			return RACE_HOBGOBLIN;
-		  case 'b':
-			return RACE_GIANT;
-		  case 'c':
-			return RACE_GNOME;
-		  case 'd':
-			return RACE_ONI;
-		  case 'e':
-			return RACE_WAKYAMBI;
-		  case 'f':
-			return RACE_OGRE;
-		  case 'g':
-			return RACE_MINOTAUR;
-		  case 'h':
-			return RACE_SATYR;
-		  case 'i':
-			return RACE_NIGHTONE;
-		  case '?':
-			switch (LOWER(*(arg+1))) {
-			case '1':
-			  display_help(buf2, "human");
-			  break;
-			case '2':
-			  display_help(buf2, "dwarf");
-			  break;
-			case '3':
-			  display_help(buf2, "elf");
-			  break;
-			case '4':
-			  display_help(buf2, "ork");
-			  break;
-			case '5':
-			  display_help(buf2, "troll");
-			  break;
-			case '6':
-			  display_help(buf2, "cyclops");
-			  break;
-			case '7':
-			  display_help(buf2, "koborokuru");
-			  break;
-			case '8':
-			  display_help(buf2, "fomori");
-			  break;
-			case '9':
-			  display_help(buf2, "menehune");
-			  break;
-			case 'a':
-			  display_help(buf2, "hobgoblin");
-			  break;
-			case 'b':
-			  display_help(buf2, "giant");
-			  break;
-			case 'c':
-			  display_help(buf2, "gnome");
-			  break;
-			case 'd':
-			  display_help(buf2, "oni");
-			  break;
-			case 'e':
-			  display_help(buf2, "wakyambi");
-			  break;
-			case 'f':
-			  display_help(buf2, "ogre");
-			  break;
-			case 'g':
-			  display_help(buf2, "minotaur");
-			  break;
-			case 'h':
-			  display_help(buf2, "satyr");
-			  break;
-			case 'i':
-			  display_help(buf2, "night one");
-			  break;
-			default:
-			  return RACE_UNDEFINED;
-			}
-			strcat(buf2, "\r\n Press [return] to continue");
-			SEND_TO_Q(buf2, d);
-			d->ccr.temp = CCR_RACE;
-			d->ccr.mode = CCR_AWAIT_CR;
-			return RETURN_HELP;
-			*/
-		default:
-			GET_RACE(d->character) == RACE_UNDEFINED;
-	}
-
-	// If the race for the character has been defined, move on to type state
-	if(GET_RACE(d->character) == RACE_UNDEFINED) {
-		changeChargenState(d, fsm, CCR_RACE);
-	} else {
-		changeChargenState(d, fsm, CCR_TYPE);
-	}
-
-	/*
-	 if ((GET_RACE(d->character) = parse_race(d, arg)) == RACE_UNDEFINED) {
-
-	    } else if (GET_RACE(d->character) == RETURN_HELP) // for when they use help
-	      return;
-
-	    if (GET_RACE(d->character) == RACE_DRAGON)
-	      d->ccr.pr[0] = PR_RACE;
-
-	    else if (GET_RACE(d->character) == RACE_DWARF)
-	      d->ccr.pr[3] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_ORK)
-	      d->ccr.pr[3] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_TROLL)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_ELF)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_CYCLOPS)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_KOBOROKURU)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_FOMORI)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_MENEHUNE)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_HOBGOBLIN)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_GIANT)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_GNOME)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_ONI)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_WAKYAMBI)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_OGRE)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_MINOTAUR)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_SATYR)
-	      d->ccr.pr[2] = PR_RACE;
-	    else if (GET_RACE(d->character) == RACE_NIGHTONE)
-	      d->ccr.pr[2] = PR_RACE;
-
-	    if (real_object(OBJ_MAP_OF_SEATTLE) > -1)
-	      obj_to_char(read_object(OBJ_MAP_OF_SEATTLE, VIRTUAL), d->character);
-	    GET_EQ(d->character, WEAR_BODY) = read_object(shirts[number(0, 4)], VIRTUAL);
-	    GET_EQ(d->character, WEAR_LEGS) = read_object(pants[number(0, 4)], VIRTUAL);
-	    GET_EQ(d->character, WEAR_FEET) = read_object(shoes[number(0, 4)], VIRTUAL);
-	    // Check to see if the radio exists (real_object() returns -1 if it can't find an object with this vnum).
-	    if (real_object(60531) > -1) {
-	      // Read the radio into a temporary object pointer so we can reference it.
-	      struct obj_data *radio = read_object(60531, VIRTUAL);
-
-	      // Set the channel to 8 MHz.
-	      GET_OBJ_VAL(radio, 0) = 8;
-
-	      // Give the radio to the character via the radio pointer.
-	      obj_to_char(radio, d->character);
-	    }
-	    ccr_type_menu(d);
-	*/
-}
-
-//
-// State : Type selection
-//
-FSM_STATE(view_type_selection) {
-  SEND_TO_Q("\r\nSelect Type of Character Creation:\r\n"
-			"  [1] Priority Based (Easy)\r\n"
-			"  [2] Points Based   (Advanced)\r\n"
-			"Enter creation method: ", d);
-}
-
-FSM_INPUT(parse_type_selection) {
-	switch (*arg) {
-		case '1':
-			priority_menu(d);
-			d->ccr.mode = CCR_PRIORITY;
-		break;
-		case '2':
-			d->ccr.points = 120;
-
-			// Assign racial minimums and subtract them from the point value.
-			d->ccr.pr[PO_ATTR] = get_minimum_attribute_points_for_race(GET_RACE(CH)) * 2;
-			d->ccr.points -= d->ccr.pr[PO_ATTR];
-
-			d->ccr.pr[PO_SKILL] = 0;
-			d->ccr.pr[PO_RESOURCES] = 1;
-			d->ccr.pr[PO_MAGIC] = 0;
-
-			// Assign racial costs and subtract them from the point value.
-			switch (GET_RACE(CH)) {
-				case RACE_HUMAN:
-				d->ccr.pr[PO_RACE] = 0;
-				break;
-				case RACE_DWARF:
-				case RACE_ORK:
-				d->ccr.pr[PO_RACE] = 5;
-				break;
-				case RACE_OGRE:
-				case RACE_HOBGOBLIN:
-				case RACE_GNOME:
-				case RACE_ONI:
-				case RACE_SATYR:
-				case RACE_KOBOROKURU:
-				case RACE_TROLL:
-				case RACE_ELF:
-				d->ccr.pr[PO_RACE] = 10;
-				break;
-				case RACE_CYCLOPS:
-				case RACE_FOMORI:
-				case RACE_GIANT:
-				case RACE_MINOTAUR:
-				case RACE_MENEHUNE:
-				case RACE_NIGHTONE:
-				case RACE_WAKYAMBI:
-				d->ccr.pr[PO_RACE] = 15;
-				break;
-			}
-			d->ccr.points -= d->ccr.pr[PO_RACE];
-			d->ccr.pr[5] = -1;
-
-			points_menu(d);
-		break;
-		default:
-			changeChargenState(d, fsm, CCR_TYPE);
-		break;
-	}
-}
-
-Chargen::Chargen()
-{
-	// Init variables here
-	log_vfprintf("Chargen : Initialize character generation handler.");
-
-	Fsm *fsm = &this->chargenFsm;
-
-	// Define states
-	fsm->createState(CCR_SEX,  &view_sex_selection,  &parse_sex_selection);
-	fsm->createState(CCR_RACE, &view_race_selection, &parse_race_selection);
-	fsm->createState(CCR_TYPE, &view_type_selection, &parse_type_selection);
-}
-
-
-Chargen::~Chargen()
-{
-	// Clean variables here
-}
-
-void Chargen::create_parse(struct descriptor_data *d, const char *arg)
-{
-	// Do nothing atm
-	log_vfprintf("*beep");
-	Fsm *fsm = &this->chargenFsm;
-	fsm->handleInput(d->ccr.mode, d, arg);
-	//_imp_create_parse(d, arg);
-}
-
