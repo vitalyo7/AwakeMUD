@@ -39,9 +39,9 @@ void mount_fire(struct char_data *ch);
 char *fread_action(FILE * fl, int nr);
 char *fread_string(FILE * fl, char *error);
 void stop_follower(struct char_data * ch);
-ACMD(do_assist);
+ACMD_DECLARE(do_assist);
 ACMD_CONST(do_flee);
-ACMD(do_action);
+ACMD_DECLARE(do_action);
 void docwagon(struct char_data *ch);
 void roll_individual_initiative(struct char_data *ch);
 bool ranged_response(struct char_data *ch, struct char_data *vict);
@@ -2086,7 +2086,7 @@ bool damage(struct char_data *ch, struct char_data *victim, int dam, int attackt
   int exp;
   bool total_miss = FALSE, awake = TRUE;
   struct obj_data *bio;
-  ACMD(do_disconnect);
+  ACMD_DECLARE(do_disconnect);
   ACMD_CONST(do_return);
   
   if (GET_POS(victim) <= POS_DEAD)
@@ -3272,7 +3272,7 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
   bool melee = FALSE;
   
   // Precondition: If you're wielding a non-weapon, back out.
-  if (att->weapon && GET_OBJ_TYPE(att->weapon) != ITEM_WEAPON) {
+  if (att->weapon && (GET_OBJ_TYPE(att->weapon) != ITEM_WEAPON && GET_OBJ_TYPE(att->weapon) != ITEM_FIREWEAPON)) {
     send_to_char(att->ch, "You struggle to figure out how to attack while using %s as a weapon!\r\n", decapitalize_a_an(GET_OBJ_NAME(att->weapon)));
     return;
   }
@@ -3650,7 +3650,7 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
       net_successes = att->successes;
     }
     
-    if (def->weapon ? GET_OBJ_TYPE(def->weapon) != ITEM_WEAPON : FALSE) {
+    if (def->weapon ? (GET_OBJ_TYPE(def->weapon) != ITEM_WEAPON || GET_OBJ_TYPE(def->weapon) != ITEM_FIREWEAPON) : FALSE) {
       // Defender's wielding a non-weapon? Whoops, net successes will never be less than 0.
       net_successes = MAX(0, net_successes);
     }
@@ -3848,11 +3848,11 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
   sprintf(rbuf, "Bod %d+%d, Pow %d, BodSuc %d, ResSuc %d: Dam %s->%s. %d%c.",
           GET_BOD(def->ch), bod, att->power, bod_success, att->successes,
           wound_name[MIN(DEADLY, MAX(0, att->damage_level))],
-          wound_name[MIN(DEADLY, MAX(0, staged_damage))],
+          wound_name[MIN(DEADLY, MAX(0, damage_total))],
           damage_total, att->is_physical ? 'P' : 'M');
   act( rbuf, 1, att->ch, NULL, NULL, TO_ROLLS );
   if (!melee)
-    combat_message(att->ch, def->ch, att->weapon, MAX(0, staged_damage), att->burst_count);
+    combat_message(att->ch, def->ch, att->weapon, MAX(0, damage_total), att->burst_count);
   damage(att->ch, def->ch, damage_total, att->dam_type, att->is_physical);
   
   if (!IS_NPC(att->ch) && IS_NPC(def->ch)) {
@@ -4497,6 +4497,7 @@ void roll_individual_initiative(struct char_data *ch)
 
 void decide_combat_pool(void)
 {
+  PERF_PROF_SCOPE(pr_, __func__);
   struct char_data *ch;
   
   for (ch = combat_list; ch; ch = ch->next_fighting) {
@@ -4540,6 +4541,7 @@ void roll_initiative(void)
 /* control the fights going on.  Called every 2 seconds from comm.c. */
 void perform_violence(void)
 {
+  PERF_PROF_SCOPE(pr_, __func__);
   struct char_data *ch;
   extern struct index_data *mob_index;
   if (combat_list) {

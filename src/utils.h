@@ -32,6 +32,8 @@ char    *str_dup(const char *source);
 char    *str_str( const char *str1, const char *str2 );
 int     str_cmp(const char *arg1, const char *arg2);
 int     strn_cmp(const char *arg1, const char *arg2, int n);
+size_t  strlcpy(char *buf, const char *src, size_t bufsz);
+size_t  strlcat(char *buf, const char *src, size_t bufsz);
 void    log(const char *str);
 void    log_vfprintf(const char *format, ...);
 void    mudlog(const char *str, struct char_data *ch, int log, bool file);
@@ -83,6 +85,10 @@ struct  obj_data *unattach_attachment_from_weapon(int location, struct obj_data 
 void    copy_over_necessary_info(struct char_data *original, struct char_data *clone);
 void    clear_editing_data(struct descriptor_data *d);
 char    *double_up_color_codes(const char *string);
+struct  char_data *get_obj_carried_by_recursive(struct obj_data *obj);
+struct  char_data *get_obj_worn_by_recursive(struct obj_data *obj);
+struct  char_data *get_obj_possessor(struct obj_data *obj);
+
 
 // Skill-related.
 char *how_good(int skill, int rank);

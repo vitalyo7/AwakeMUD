@@ -291,7 +291,7 @@ ACMD(do_hail)
 
   if (ch->in_room->sector_type != SPIRIT_CITY || !empty ||
       ROOM_FLAGGED(ch->in_room, ROOM_INDOORS)) {
-    send_to_char("There doesn't seem to be any cabs in the area.\r\n", ch);
+    send_to_char("There don't seem to be any cabs in the area.\r\n", ch);
     return;
   }
 
@@ -391,7 +391,7 @@ SPECIAL(taxi)
 {
   extern bool memory(struct char_data *ch, struct char_data *vict);
   ACMD_CONST(do_say);
-  ACMD(do_action);
+  ACMD_DECLARE(do_action);
 
   struct char_data *temp = NULL, *driver = (struct char_data *) me;
   struct room_data *temp_room = NULL;
@@ -836,7 +836,7 @@ SPECIAL(call_elevator)
       if (elevator[i].floor[j].vnum == ch->in_room->number)
         index = i;
 
-  if (CMD_IS("push")) {
+  if (CMD_IS("push") || CMD_IS("press")) {
     skip_spaces(&argument);
     if (!*argument || !(!strcasecmp("elevator", argument) ||
                         !strcasecmp("button", argument)))
@@ -1095,7 +1095,7 @@ static int process_elevator(struct room_data *room,
       close_elevator_doors(room, num, room->rating);
       elevator[num].dir = -1;
     }
-  } else if (CMD_IS("push"))
+  } else if (CMD_IS("push") || CMD_IS("press"))
   {
     if (IS_ASTRAL(ch)) {
       send_to_char("You can't do that in your current state.\r\n", ch);
@@ -1224,6 +1224,7 @@ static int process_elevator(struct room_data *room,
 
 void ElevatorProcess(void)
 {
+  PERF_PROF_SCOPE(pr_, __func__);
   int i, rnum;
 
   char empty_argument = '\0';
@@ -1255,6 +1256,7 @@ SPECIAL(escalator)
 
 void EscalatorProcess(void)
 {
+  PERF_PROF_SCOPE(pr_, __func__);
   int i, dir;
   struct char_data *temp, *next;
 

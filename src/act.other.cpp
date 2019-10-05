@@ -158,7 +158,7 @@ ACMD(do_quit)
 /* generic function for commands which are normally overridden by
    special procedures - i.e., shop commands, mail commands, etc. */
 ACMD_CONST(do_not_here) {
-  ACMD(do_not_here);
+  ACMD_DECLARE(do_not_here);
   do_not_here(ch, NULL, 0, 0);
 }
 
@@ -192,7 +192,7 @@ ACMD(do_steal)
     return;
   }
 
-  ACMD(do_gen_comm);
+  ACMD_DECLARE(do_gen_comm);
 
   argument = one_argument(argument, obj_name);
   one_argument(argument, vict_name);
@@ -1037,8 +1037,8 @@ const char *tog_messages[][2] = {
                              "You will now display your playergroup affiliation in the wholist.\r\n"},
                             {"You will no longer receive the keepalive pulses from the MUD.\r\n",
                              "You will now receive keepalive pulses from the MUD.\r\n"},
-                            {"Screenreader mode disabled. Your TOGGLE NOCOLOR settings are untouched.\r\n",
-                             "Screenreader mode enabled. Extraneous text and ASCII effects will be reduced. ANSI color has also been disabled-- you may type TOGGLE NOCOLOR to re-enable it.\r\n"},
+                            {"Screenreader mode disabled. Your TOGGLE NOCOLOR and TOGGLE NOPROMPT settings have not been altered.\r\n",
+                             "Screenreader mode enabled. Extraneous text will be reduced. Color and prompts have been disabled too, you may TOGGLE NOCOLOR and TOGGLE NOPROMPT to restore them.\r\n"},
                             {"You will now receive ANSI color codes again.\r\n",
                              "You will no longer receive ANSI color codes.\r\n"},
                             {"You will now receive prompts.\r\n",
@@ -1091,7 +1091,7 @@ ACMD(do_toggle)
               ONOFF(PRF_FLAGGED(ch, PRF_NOPROMPT)));
     else
       sprintf(buf,
-              "       Fightgag: %-3s              NoOOC: %-3s              Quest: %-3s\r\n"
+              "       Fightgag: %-3s              NoOOC: %-3s              Hired: %-3s\r\n"
               "        Movegag: %-3s            Compact: %-3s          AutoExits: %-3s\r\n"
               "         NoTell: %-3s            NoShout: %-3s               Echo: %-3s\r\n"
               "         Newbie: %-3s           Nohassle: %-3s            Menugag: %-3s\r\n"
@@ -1240,9 +1240,11 @@ ACMD(do_toggle)
     } else if (is_abbrev(argument, "screenreader")) {
       result = PRF_TOG_CHK(ch, PRF_SCREENREADER);
       
-      // Turning on the screenreader? Color goes off.
-      if (result)
+      // Turning on the screenreader? Color and prompt goes off.
+      if (result) {
         PRF_FLAGS(ch).SetBit(PRF_NOCOLOR);
+        PRF_FLAGS(ch).SetBit(PRF_NOPROMPT);
+      }
       mode = 29;
     } else if (is_abbrev(argument, "nocolors") || is_abbrev(argument, "colors") || is_abbrev(argument, "colours")) {
       result = PRF_TOG_CHK(ch, PRF_NOCOLOR);
@@ -2790,6 +2792,7 @@ ACMD(do_boost)
 
 void process_boost()
 {
+  PERF_PROF_SCOPE(pr_, __func__);
   int power, damage;
   struct char_data *next;
   for (struct char_data *i = character_list; i; i = next) {
@@ -3720,7 +3723,7 @@ ACMD(do_survey)
   send_to_char(buf, ch);
 }
 
-extern ACMD(do_pool);
+extern ACMD_DECLARE(do_pool);
 
 ACMD(do_cpool)
 {

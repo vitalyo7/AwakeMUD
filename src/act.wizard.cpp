@@ -43,6 +43,7 @@
 #include "newmatrix.h"
 #include "limits.h"
 #include "security.h"
+#include "perfmon.h"
 
 #if defined(__CYGWIN__)
 #include <crypt.h>
@@ -264,27 +265,27 @@ ACMD(do_echo)
     }
     memset(buf, '\0', sizeof(buf));
     switch (subcmd) {
-    case SCMD_EMOTE:
-      if (argument[0] == '\'' && argument[1] == 's' ) {
-        if (PLR_FLAGGED(ch, PLR_MATRIX))
-          sprintf(buf, "%s%s", ch->persona->name, argument);
-        else
-          sprintf(buf, "$n%s", argument);
-      } else {
-        if (PLR_FLAGGED(ch, PLR_MATRIX))
-          sprintf(buf, "%s %s", ch->persona->name, argument);
-        else
-          sprintf(buf, "$n %s", argument);
-      }
-      break;
-    case SCMD_ECHO:
-    case SCMD_AECHO:
-      if (!PRF_FLAGGED(ch, PRF_QUESTOR) && (ch->desc && ch->desc->original ? GET_LEVEL(ch->desc->original) : GET_LEVEL(ch)) < LVL_ARCHITECT) {
-        nonsensical_reply(ch);
-        return;
-      }
-      sprintf(buf, "%s", argument);
-      break;
+      case SCMD_EMOTE:
+        if (argument[0] == '\'' && argument[1] == 's' ) {
+          if (PLR_FLAGGED(ch, PLR_MATRIX))
+            sprintf(buf, "%s%s", ch->persona->name, argument);
+          else
+            sprintf(buf, "$n%s", argument);
+        } else {
+          if (PLR_FLAGGED(ch, PLR_MATRIX))
+            sprintf(buf, "%s %s", ch->persona->name, argument);
+          else
+            sprintf(buf, "$n %s", argument);
+        }
+        break;
+      case SCMD_ECHO:
+      case SCMD_AECHO:
+        if (!PRF_FLAGGED(ch, PRF_QUESTOR) && (ch->desc && ch->desc->original ? GET_LEVEL(ch->desc->original) : GET_LEVEL(ch)) < LVL_ARCHITECT) {
+          nonsensical_reply(ch);
+          return;
+        }
+        sprintf(buf, "%s", argument);
+        break;
     }
 
     if (subcmd == SCMD_AECHO) {
@@ -295,6 +296,70 @@ ACMD(do_echo)
       if (PLR_FLAGGED(ch, PLR_MATRIX))
         send_to_host(ch->persona->in_host, buf, ch->persona, TRUE);
       else {
+        /*
+        const char *parse_emote_by_x_for_y(const char *emote, struct char_data *ch, struct char_data *targ) {
+          char tmp_name[strlen(emote) + 1];
+          int tmp_index, buf2_index;
+          struct char_data *tmp_vict;
+          
+          // Actor is recipient? Skip (they're handled elsewhere in logic).
+          if (targ == ch)
+            return NULL;
+          
+          // Actor is intangible and invisible to recipient? Skip.
+          if ((IS_ASTRAL(ch) || IS_PROJECT(ch)) && !(IS_ASTRAL(targ) || IS_PROJECT(targ) || IS_DUAL(targ)))
+            return NULL;
+          
+          // Scan the emote for @ character, which indicates targeting.
+          for (int i = 0; emote[i]; i++) {
+            if (emote[i] == '@') {
+              // Found an @. Set up for evaluation, and store current 'i' as marker.
+              tmp_index = 0;
+              marker = i;
+              
+              // Copy out the target's name, null-terminating it.
+              while (isalpha(emote[++i]))
+                tmp_name[tmp_index++] = i;
+              tmp_name[tmp_index] = '\0';
+              
+              // Move 'i' back one character so it is pointing at the last character of the @-name.
+              i--;
+              
+              // Search the room for the target.
+              tmp_vict = get_char_room_vis(ch, tmp_name);
+              if (tmp_vict == targ) {
+                // Check for "@'s" -> "your"
+                if (i <= strlen(emote) - 3 && emote[i+1] == '\'' && emote[i+2] == 's') {
+                  i += 1; // Advance to the "s".
+                  sprintf(tmp_name, "your");
+                } else {
+                  sprintf(tmp_name, "you");
+                }
+              } // End of targ == vict
+              else if (tmp_vict) {
+                // Check for visibility.
+                if (CAN_SEE(targ, vict)) {
+                  if (found_mem(GET_MEMORY(targ), vict)) {
+                    strcpy(tmp_name, CAP(found_mem(GET_MEMORY(targ), vict)->mem));
+                  } else {
+                    strcpy(tmp_name, GET_NAME(vict));
+                  }
+                } else {
+                  strcpy(tmp_name, "someone");
+                }
+              } // End of targ != vict
+              else {
+                // todo
+                broken compile here
+              }
+            } // End of char == '@'
+            else {
+              // No special character, copy it 1:1.
+              buf2[buf2_index++] = emote[i];
+            }
+          }
+        }
+         */
         for (struct char_data *targ = ch->in_veh ? ch->in_veh->people : ch->in_room->people; targ; targ = ch->in_veh ? targ->next_in_veh : targ->next_in_room)
           if (targ != ch) {
             if ((IS_ASTRAL(ch) || IS_PROJECT(ch)) && !(IS_ASTRAL(targ) || IS_PROJECT(targ) || IS_DUAL(targ)))
@@ -560,7 +625,7 @@ void transfer_ch_to_ch(struct char_data *victim, struct char_data *ch) {
 
 ACMD(do_trans)
 {
-  ACMD(do_transfer);
+  ACMD_DECLARE(do_transfer);
 
   if (!access_level(ch, LVL_CONSPIRATOR)) {
     do_transfer(ch, argument, 0, 0);
@@ -663,7 +728,7 @@ ACMD(do_teleport)
     char_from_room(victim);
     char_to_room(victim, target);
     act("$n arrives from a puff of smoke.", FALSE, victim, 0, 0, TO_ROOM);
-    act("$n has teleported you!", FALSE, ch, 0, (char *) victim, TO_VICT);
+    act("$n has teleported you!", FALSE, ch, 0, victim, TO_VICT);
     look_at_room(victim, 0);
     sprintf(buf2, "%s teleported %s to %s",
             GET_CHAR_NAME(ch), IS_NPC(victim) ? GET_NAME(victim) : GET_CHAR_NAME(victim), target->name);
@@ -838,9 +903,10 @@ void do_stat_object(struct char_data * ch, struct obj_data * j)
   struct extra_descr_data *desc;
 
   virt = GET_OBJ_VNUM(j);
-  sprintf(buf, "Name: '^y%s^n', Aliases: %s\r\n",
+  sprintf(buf, "Name: '^y%s^n', Aliases: %s\r\nSource Book: %s\r\n",
           ((j->text.name) ? j->text.name : "<None>"),
-          j->text.keywords);
+          j->text.keywords,
+          j->source_info ? j->source_info : "<None>");
 
   sprinttype(GET_OBJ_TYPE(j), item_types, buf1);
 
@@ -1134,8 +1200,8 @@ void do_stat_character(struct char_data * ch, struct char_data * k)
     sprintf(ENDOF(buf), ", Status: Mortal \r\nRep: [^y%3d^n] Not: [^y%3d^n] TKE: [^y%3d^n]\r\n",
             GET_REP(k), GET_NOT(k), GET_TKE(k));
 
-  strcpy(buf1, (char *) asctime(localtime(&(k->player.time.birth))));
-  strcpy(buf2, (char *) asctime(localtime(&(k->player.time.lastdisc))));
+  strcpy(buf1, (const char *) asctime(localtime(&(k->player.time.birth))));
+  strcpy(buf2, (const char *) asctime(localtime(&(k->player.time.lastdisc))));
   buf1[10] = buf2[10] = '\0';
 
   sprintf(ENDOF(buf), "Created: [%s], Last Online: [%s], Played [%dh %dm]\r\n",
@@ -1559,7 +1625,7 @@ ACMD(do_wizpossess)
 }
 
 ACMD_CONST(do_return) {
-  ACMD(do_return);
+  ACMD_DECLARE(do_return);
   do_return(ch, NULL, cmd, subcmd);
 }
 
@@ -1915,7 +1981,7 @@ ACMD(do_purge)
 
       for (vict = ch->in_room->people; vict; vict = next_v) {
         next_v = vict->next_in_room;
-        if (IS_NPC(vict))
+        if (IS_NPC(vict) && vict != ch)
           extract_char(vict);
       }
 
@@ -2147,7 +2213,7 @@ ACMD(do_restore)
     if ((access_level(ch, LVL_DEVELOPER)) &&
         (IS_SENATOR(vict)) && !IS_NPC(vict)) {
       for (i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
-        set_character_skill(ch, i, 100, FALSE);
+        set_character_skill(vict, i, 100, FALSE);
 
       if (IS_SENATOR(vict) && !access_level(vict, LVL_EXECUTIVE)) {
         GET_REAL_INT(vict) = 15;
@@ -2392,7 +2458,7 @@ ACMD(do_date)
   else
     mytime = boot_time;
 
-  tmstr = (char *) asctime(localtime(&mytime));
+  tmstr = (char *) asctime(localtime(&mytime)); // technically kosher; "The returned value points to an internal array whose validity or value may be altered by any subsequent call to asctime or ctime."
   *(tmstr + strlen(tmstr) - 1) = '\0';
 
   if (subcmd == SCMD_DATE)
@@ -2919,7 +2985,7 @@ void print_zone_to_buf(char *bufptr, int zone, int detailed)
 ACMD(do_show)
 {
   if (GET_LEVEL(ch) < LVL_BUILDER) {
-    ACMD(do_mort_show);
+    ACMD_DECLARE(do_mort_show);
     do_mort_show(ch, argument, 0, 0);
     return;
   }
@@ -4804,6 +4870,10 @@ ACMD(do_restring)
     send_to_char("You don't have that item.\r\n", ch);
     return;
   }
+  if (GET_OBJ_TYPE(obj) == ITEM_GUN_ACCESSORY || GET_OBJ_TYPE(obj) == ITEM_MOD) {
+    send_to_char("Sorry, gun attachments and vehicle mods can't be restrung.\r\n", ch);
+    return;
+  }
   if (strlen(buf) >= LINE_LENGTH) {
     send_to_char("That restring is too long, please shorten it.\r\n", ch);
     return;
@@ -4866,4 +4936,69 @@ ACMD(do_zone) {
 
 ACMD(do_room) {
   send_to_char(ch, "Current room num: %ld\r\n", ch->in_room->number);
+}
+
+ACMD(do_perfmon) {
+    char arg1[MAX_INPUT_LENGTH];
+
+    if (!ch->desc) {
+      log("No descriptor in do_perfmon");
+      return;
+    }
+
+    argument = one_argument(argument, arg1);
+
+    if (arg1[0] == '\0')
+    {
+        send_to_char( 
+            "perfmon all             - Print all perfmon info.\r\n"
+            "perfmon summ            - Print summary,\r\n"
+            "perfmon prof            - Print profiling info.\r\n"
+            "perfmon sect <section>  - Print profiling info for section.\r\n",
+            ch );
+        return;
+    }
+
+    if (!str_cmp( arg1, "all"))
+    {
+        char buf[MAX_STRING_LENGTH];
+
+        size_t written = PERF_repr( buf, sizeof(buf) );
+        written = PERF_prof_repr_total( buf + written, sizeof(buf) - written);
+        page_string(ch->desc, buf, 1);
+
+        return;
+    }
+    else if (!str_cmp( arg1, "summ"))
+    {
+        char buf[MAX_STRING_LENGTH];
+
+        PERF_repr( buf, sizeof(buf) );
+        page_string(ch->desc, buf, 1);
+        return;
+    }
+    else if (!str_cmp( arg1, "prof"))
+    {
+        char buf[MAX_STRING_LENGTH];
+
+        PERF_prof_repr_total( buf, sizeof(buf) );
+        page_string(ch->desc, buf, 1);
+
+        return;
+    }
+    else if (!str_cmp( arg1, "sect"))
+    {
+        char buf[MAX_STRING_LENGTH];
+
+        PERF_prof_repr_sect( buf, sizeof(buf), argument );
+        page_string(ch->desc, buf, 1);
+
+        return;
+    }
+    else
+    {
+        char empty_arg[] = {0};
+        do_perfmon( ch, empty_arg, cmd, subcmd );
+        return;
+    }
 }

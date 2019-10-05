@@ -54,7 +54,7 @@ bool memory(struct char_data *ch, struct char_data *vict);
 extern struct command_info cmd_info[];
 
 ACMD_CONST(do_say);
-ACMD(do_echo);
+ACMD_DECLARE(do_echo);
 ACMD_CONST(do_time);
 ACMD_CONST(do_gen_door);
 
@@ -328,7 +328,7 @@ SPECIAL(metamagic_teacher)
 {
   struct char_data *master = (struct char_data *) me;
   int i = 0, x = 0, suc, ind;
-  if (IS_NPC(ch) || !CMD_IS("train"))
+  if (IS_NPC(ch) || !(CMD_IS("learn") || CMD_IS("practice") || CMD_IS("train")))
     return FALSE;
   
   if (GET_TRADITION(ch) == TRAD_MUNDANE) {
@@ -426,7 +426,7 @@ SPECIAL(nerp_skills_teacher) {
   can_teach_skill[SKILL_ARMED_COMBAT] = FALSE; // NPC-only skill
   can_teach_skill[SKILL_UNUSED_WAS_PILOT_FIXED_WING] = FALSE; // what it says on the tin
   
-  if (IS_NPC(ch) || !CMD_IS("practice"))
+  if (IS_NPC(ch) || !(CMD_IS("learn") || CMD_IS("practice") || CMD_IS("train")))
     return FALSE;
   
   if (!CAN_SEE(master, ch)) {
@@ -561,7 +561,7 @@ SPECIAL(teacher)
   struct char_data *master = (struct char_data *) me;
   int i, ind, max, skill_num;
 
-  if (IS_NPC(ch) || !CMD_IS("practice"))
+  if (IS_NPC(ch) || !(CMD_IS("learn") || CMD_IS("practice") || CMD_IS("train")))
     return FALSE;
   
   if (!CAN_SEE(master, ch)) {
@@ -866,7 +866,7 @@ SPECIAL(trainer)
   struct char_data *trainer = (struct char_data *) me;
   int ind;
 
-  if (!CMD_IS("train") || IS_NPC(ch) || !CAN_SEE(trainer, ch) || FIGHTING(ch) ||
+  if (!(CMD_IS("learn") || CMD_IS("practice") || CMD_IS("train")) || IS_NPC(ch) || !CAN_SEE(trainer, ch) || FIGHTING(ch) ||
       GET_POS(ch) < POS_STANDING)
     return FALSE;
 
@@ -940,7 +940,7 @@ SPECIAL(spell_trainer)
 {
   struct char_data *trainer = (struct char_data *) me;
   int i, force;
-  if (!CMD_IS("learn") || IS_NPC(ch) || !CAN_SEE(trainer, ch) || FIGHTING(ch) ||
+  if (!(CMD_IS("learn") || CMD_IS("practice") || CMD_IS("train")) || IS_NPC(ch) || !CAN_SEE(trainer, ch) || FIGHTING(ch) ||
       GET_POS(ch) < POS_STANDING)
     return FALSE;
   if (GET_TRADITION(ch) != TRAD_SHAMANIC && GET_TRADITION(ch) != TRAD_HERMETIC) {
@@ -1096,7 +1096,7 @@ SPECIAL(adept_trainer)
   struct char_data *trainer = (struct char_data *) me;
   int ind, power, i;
 
-  if (!CMD_IS("train") || IS_NPC(ch) || !CAN_SEE(trainer, ch) || FIGHTING(ch) ||
+  if (!(CMD_IS("learn") || CMD_IS("practice") || CMD_IS("train")) || IS_NPC(ch) || !CAN_SEE(trainer, ch) || FIGHTING(ch) ||
       GET_POS(ch) < POS_STANDING)
     return FALSE;
 
@@ -1267,7 +1267,7 @@ SPECIAL(janitor)
   struct char_data *jan = (struct char_data *) me;
   struct obj_data *i;
   bool extract = FALSE;
-  ACMD(do_gen_comm);
+  ACMD_DECLARE(do_gen_comm);
 
   if (cmd || FIGHTING(ch) || !AWAKE(ch))
     return 0;
@@ -3235,7 +3235,7 @@ int gen_receptionist(struct char_data * ch, struct char_data * recep,
   vnum_t save_room;
   const char *action_table[] = {"smile", "dance", "sigh", "blush", "burp", "cough",
     "fart", "twiddle", "yawn"};
-  ACMD(do_action);
+  ACMD_DECLARE(do_action);
 
   if (!ch->desc || IS_NPC(ch))
     return FALSE;
@@ -3718,7 +3718,7 @@ SPECIAL(floor_has_glass_shards) {
 
 SPECIAL(bouncer_gentle)
 {
-  ACMD(do_look);
+  ACMD_CONST(do_look);
   
   if (!cmd)
     return FALSE;
@@ -3746,7 +3746,7 @@ SPECIAL(bouncer_gentle)
     char_from_room(ch);
     char_to_room(ch, &world[real_room(toroom)]);
     act("$n is escorted in by $N, who gives $m a stern look and departs.", FALSE, ch, 0, bouncer, TO_ROOM);
-    do_look(ch, (char *) "", 0, 0);
+    do_look(ch, "", 0, 0);
     return TRUE;
   }
   

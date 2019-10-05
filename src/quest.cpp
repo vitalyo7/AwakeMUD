@@ -37,9 +37,11 @@ extern void add_follower(struct char_data *ch, struct char_data *leader);
 extern void free_quest(struct quest_data *quest);
 extern bool resize_qst_array(void);
 extern char *cleanup(char *, const char *);
+extern int perform_drop(struct char_data * ch, struct obj_data * obj, byte mode,
+                        const char *sname, struct room_data *random_donation_room);
 
 ACMD_CONST(do_say);
-ACMD(do_action);
+ACMD_DECLARE(do_action);
 SPECIAL(johnson);
 
 #define QUEST          d->edit_quest
@@ -256,10 +258,10 @@ void load_quest_targets(struct char_data *johnson, struct char_data *ch)
         obj->obj_flags.quest_id = GET_IDNUM(ch);
         obj_to_char(obj, johnson);
         if (!perform_give(johnson, ch, obj)) {
-          char buf[256];
-          sprintf(buf, "You cannot hold %s.", obj->text.name);
+          char buf[512];
+          sprintf(buf, "Looks like your hands are full. You'll need %s for the run.", decapitalize_a_an(obj->text.name));
           do_say(johnson, buf, 0, 0);
-          extract_obj(obj);
+          perform_drop(johnson, obj, SCMD_DROP, "drop", NULL);
         }
         obj = NULL;
         break;
@@ -1642,7 +1644,7 @@ void qedit_parse(struct descriptor_data *d, const char *arg)
   case QEDIT_MIN_REP:
     number = atoi(arg);
     if (number < 0 || number > 500)
-      send_to_char("Invalid value.  Enter minimum reputation: ", CH);
+      send_to_char("Invalid value.  Enter minimum reputation between 0-500: ", CH);
     else {
       QUEST->min_rep = number;
       send_to_char("Enter maximum reputation: ", CH);

@@ -1595,6 +1595,13 @@ void look_at_target(struct char_data * ch, char *arg)
   
 }
 
+ACMD_CONST(do_look) {
+  char not_const[MAX_STRING_LENGTH];
+  strcpy(not_const, argument);
+  ACMD_DECLARE(do_look);
+  do_look(ch, not_const, cmd, subcmd);
+}
+
 ACMD(do_look)
 {
   static char arg2[MAX_INPUT_LENGTH];
@@ -2073,6 +2080,11 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
     strcat(buf, buf1);
     strcat(buf, "^n\r\n");
   }
+  
+  if (j->source_info) {
+    sprintf(ENDOF(buf), "\r\nIt references data from the following source book(s): %s^n\r\n", j->source_info);
+  }
+  
   send_to_char(buf, ch);
 }
 
@@ -3045,7 +3057,7 @@ ACMD(do_equipment)
 ACMD_CONST(do_time) {
   char not_const[MAX_STRING_LENGTH];
   strcpy(not_const, argument);
-  ACMD(do_time);
+  ACMD_DECLARE(do_time);
   do_time(ch, not_const, cmd, subcmd);
 }
 
@@ -3303,7 +3315,7 @@ ACMD(do_wizhelp)
 ACMD_CONST(do_who) {
   char not_const[MAX_STRING_LENGTH];
   strcpy(not_const, argument);
-  ACMD(do_who);
+  ACMD_DECLARE(do_who);
   do_who(ch, not_const, cmd, subcmd);
 }
 
@@ -3997,7 +4009,7 @@ void sort_commands(void)
 {
   int a, b, tmp;
   
-  ACMD(do_action);
+  ACMD_DECLARE(do_action);
   
   num_of_cmds = 0;
   

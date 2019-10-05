@@ -2488,3 +2488,84 @@ char *how_good(int skill, int rank)
   sprintf(buf, " (%s)", skill_rank_name(rank, skills[skill].type == SKILL_TYPE_KNOWLEDGE));
   return buf;
 }
+
+/*
+Returns total length of the string that would have been created.
+*/
+size_t strlcpy(char *buf, const char *src, size_t bufsz)
+{
+    size_t src_len = strlen(src);
+    size_t rtn = src_len;
+
+    if (bufsz > 0)
+    {
+        if (src_len >= bufsz) 
+        {
+            src_len = bufsz - 1;
+        }
+        memcpy(buf, src, src_len);
+        buf[src_len] = '\0';
+    }
+
+    return rtn;
+}
+
+/*
+Returns total length of the string that would have been created.
+*/
+size_t strlcat(char *buf, const char *src, size_t bufsz)
+{
+    size_t buf_len = strlen(buf);
+    size_t src_len = strlen(src);
+    size_t rtn = buf_len + src_len;
+
+    if (buf_len < (bufsz - 1))
+    {
+        if (src_len >= (bufsz - buf_len))
+        {
+            src_len = bufsz - buf_len - 1;
+        }
+        memcpy(buf + buf_len, src, src_len);
+        buf[buf_len + src_len] = '\0';
+    }
+
+    return rtn;
+}
+
+// Un-nests contained objects until it figures out who's actually carrying the object (if anyone).
+struct char_data *get_obj_carried_by_recursive(struct obj_data *obj) {
+  if (!obj)
+    return NULL;
+  
+  if (obj->carried_by)
+    return obj->carried_by;
+  
+  if (obj->in_obj)
+    return get_obj_carried_by_recursive(obj->in_obj);
+  
+  return NULL;
+}
+
+// Un-nests contained objects until it figures out who's actually wearing the object (if anyone).
+struct char_data *get_obj_worn_by_recursive(struct obj_data *obj) {
+  if (!obj)
+    return NULL;
+  
+  if (obj->worn_by)
+    return obj->worn_by;
+  
+  if (obj->in_obj)
+    return get_obj_worn_by_recursive(obj->in_obj);
+  
+  return NULL;
+}
+
+// Finds the object's holder (either carrying or wearing it or its parent object recursively).
+struct char_data *get_obj_possessor(struct obj_data *obj) {
+  struct char_data *owner;
+  
+  if ((owner = get_obj_carried_by_recursive(obj)))
+    return owner;
+  
+  return get_obj_worn_by_recursive(obj);
+}

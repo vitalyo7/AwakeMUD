@@ -10,13 +10,23 @@
 
 #ifndef _interpreter_h_
 #define _interpreter_h_
+
+#include "perfmon.h"
 /*
 #define ACMD(name)  \
    void (name)(struct char_data *ch, __attribute__ ((unused)) char *argument, __attribute__ ((unused)) int cmd, __attribute__ ((unused)) int subcmd)
 */
 
-#define ACMD(name)   \
+#define ACMD_DECLARE(name)   \
     void (name)(struct char_data *ch, char *argument, int cmd, int subcmd)
+#define ACMD(name)  \
+    static void impl_ ## name ## _ (struct char_data *ch, char *argument, int cmd, int subcmd); \
+    void (name)(struct char_data *ch, char *argument, int cmd, int subcmd) \
+    { \
+      PERF_PROF_SCOPE( pr_, #name ); \
+      impl_ ## name ## _(ch, argument, cmd, subcmd); \
+    } \
+    static void impl_ ## name ## _ (struct char_data *ch, char *argument, int cmd, int subcmd)
 #define ACMD_CONST(name)   \
     void (name)(struct char_data *ch, const char *argument, int cmd, int subcmd)
 
@@ -32,6 +42,7 @@ int     search_block(char *arg, const char **list, bool exact);
 char    lower( char c );
 char    *one_argument(char *argument, char *first_arg);
 char    *any_one_arg(char *argument, char *first_arg);
+const char *any_one_arg_const(const char *argument, char *first_arg);
 char    *two_arguments(char *argument, char *first_arg, char *second_arg);
 int     fill_word(char *argument);
 void    half_chop(char *string, char *arg1, char *arg2);
