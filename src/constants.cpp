@@ -562,6 +562,8 @@ const char *preference_bits[] =
     "PGROUPLOG",
     "SHOWGROUPTAG",
     "KEEPALIVE",
+    "HELPLOG",
+    "PURGELOG",
     "\n"
   };
 
@@ -882,6 +884,7 @@ const char *extra_bits[] =
     "NOHUMAN",
     "SNIPER",
     "IMMLOAD",
+    "NERPS",
     "\n"
   };
 
@@ -1014,6 +1017,8 @@ const char *log_types[] =
     "GRIDLOG",
     "WRECKLOG",
     "PGROUPLOG",
+    "HELPLOG",
+    "PURGELOG",
     "\n"
   };
 

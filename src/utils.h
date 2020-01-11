@@ -28,8 +28,8 @@ struct obj_data;
 
 /* public functions in utils.c */
 bool    has_cyberweapon(struct char_data *ch);
-char    *str_dup(const char *source);
-char    *str_str( const char *str1, const char *str2 );
+char *  str_dup(const char *source);
+char *  str_str( const char *str1, const char *str2 );
 int     str_cmp(const char *arg1, const char *arg2);
 int     strn_cmp(const char *arg1, const char *arg2, int n);
 size_t  strlcpy(char *buf, const char *src, size_t bufsz);
@@ -84,10 +84,13 @@ bool    attach_attachment_to_weapon(struct obj_data *attachment, struct obj_data
 struct  obj_data *unattach_attachment_from_weapon(int location, struct obj_data *weapon, struct char_data *ch);
 void    copy_over_necessary_info(struct char_data *original, struct char_data *clone);
 void    clear_editing_data(struct descriptor_data *d);
-char    *double_up_color_codes(const char *string);
+char *  double_up_color_codes(const char *string);
 struct  char_data *get_obj_carried_by_recursive(struct obj_data *obj);
 struct  char_data *get_obj_worn_by_recursive(struct obj_data *obj);
 struct  char_data *get_obj_possessor(struct obj_data *obj);
+char *  generate_new_loggable_representation(struct obj_data *obj);
+void    purgelog(struct veh_data *veh);
+char *  replace_substring(char *source, char *dest, const char *replace_target, const char *replacement);
 
 
 // Skill-related.
@@ -271,7 +274,7 @@ void    update_pos(struct char_data *victim);
       : FALSE                                    \
     )                                            \
 )
-#define ROOM_FLAGGED(loc, flag) ((loc)->room_flags.IsSet((flag)))
+#define ROOM_FLAGGED(loc, flag) ((loc) ? (loc)->room_flags.IsSet((flag)) : FALSE)
 
 /* IS_AFFECTED for backwards compatibility */
 #define IS_AFFECTED(ch, skill) (AFF_FLAGGED((ch), (skill)))
@@ -316,6 +319,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 
 #define GET_VEH_NAME(veh) (decapitalize_a_an((veh)->restring ? (veh)->restring : (veh)->short_description))
 #define GET_VEH_DESC(veh) ((veh)->restring_long ? (veh)->restring_long : (veh)->long_description)
+#define GET_VEH_VNUM(veh) ((veh)->veh_number)
 #define GET_OBJ_NAME(obj) ((obj)->restring ? (obj)->restring : (obj)->text.name)
 #define GET_OBJ_DESC(obj) ((obj)->photo ? (obj)->photo : (obj)->text.look_desc)
 #define GET_KEYWORDS(ch)  ((ch)->player.physical_text.keywords)
@@ -594,8 +598,8 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 
 #define CAN_WEAR(obj, part) ((obj)->obj_flags.wear_flags.IsSet((part)))
 
-#define IS_WEAPON(type) ((((type) >= TYPE_HIT) && ((type) < TYPE_SUFFERING)) || (type) == TYPE_TASER)
-#define IS_GUN(type) (((type) >= WEAP_HOLDOUT) && ((type) < WEAP_GREN_LAUNCHER) && (type) != WEAP_TASER)
+#define IS_WEAPON(type) (((type) >= TYPE_HIT) && ((type) < TYPE_SUFFERING))
+#define IS_GUN(type) (((type) >= WEAP_HOLDOUT) && ((type) < WEAP_GREN_LAUNCHER))
 
 
 /* compound utilities and other macros **********************************/
@@ -773,6 +777,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define GET_WEAPON_ATTACH_UNDER_VNUM(weapon)   (GET_OBJ_VAL((weapon), 9))
 #define GET_WEAPON_POSSIBLE_FIREMODES(weapon)  (GET_OBJ_VAL((weapon), 10))
 #define GET_WEAPON_FIREMODE(weapon)            (GET_OBJ_VAL((weapon), 11))
+#define GET_WEAPON_INTEGRAL_RECOIL_COMP(weap)  (GET_OBJ_ATTEMPT((weap)))
 #define GET_WEAPON_FULL_AUTO_COUNT(weapon)     (GET_OBJ_TIMER((weapon)))
 #define GET_WEAPON_ATTACH_LOC(weapon, loc)     (((loc) >= ACCESS_LOCATION_TOP && (loc) <= ACCESS_LOCATION_UNDER) ? \
                                                     GET_OBJ_VAL((weapon), (loc)) : 0)
@@ -790,6 +795,9 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 // ITEM_DRUG convenience defines
 
 // ITEM_WORN convenience defines
+#define GET_WORN_BALLISTIC(worn)               (GET_OBJ_VAL((worn), 5))
+#define GET_WORN_IMPACT(worn)                  (GET_OBJ_VAL((worn), 6))
+#define GET_WORN_MATCHED_SET(worn)             (GET_OBJ_VAL((worn), 8))
 
 // ITEM_OTHER convenience defines
 
@@ -818,21 +826,22 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 // ITEM_FOUNTAIN convenience defines
 
 // ITEM_CYBERWARE convenience defines
-#define GET_CYBERWARE_TYPE(cyberware)         (GET_OBJ_VAL((cyberware), 0))
-#define GET_CYBERWARE_FLAGS(cyberware)        (GET_OBJ_VAL((cyberware), 3)) // CYBERWEAPON_RETRACTABLE, CYBERWEAPON_IMPROVED
-#define GET_CYBERWARE_LACING_TYPE(cyberware)  (GET_OBJ_VAL((cyberware), 3)) // Yes, this is also value 3. Great design here.
-#define GET_CYBERWARE_IS_DISABLED(cyberware)  (GET_OBJ_VAL((cyberware), 9))
+#define GET_CYBERWARE_TYPE(cyberware)          (GET_OBJ_VAL((cyberware), 0))
+#define GET_CYBERWARE_FLAGS(cyberware)         (GET_OBJ_VAL((cyberware), 3)) // CYBERWEAPON_RETRACTABLE, CYBERWEAPON_IMPROVED
+#define GET_CYBERWARE_LACING_TYPE(cyberware)   (GET_OBJ_VAL((cyberware), 3)) // Yes, this is also value 3. Great design here.
+#define GET_CYBERWARE_ESSENCE_COST(cyberware)  (GET_OBJ_VAL((cyberware), 4))
+#define GET_CYBERWARE_IS_DISABLED(cyberware)   (GET_OBJ_VAL((cyberware), 9))
 
 // ITEM_CYBERDECK convenience defines
-#define GET_CYBERDECK_MPCP(deck)              (GET_OBJ_VAL((deck), 0))
-#define GET_CYBERDECK_HARDENING(deck)         (GET_OBJ_VAL((deck), 1))
-#define GET_CYBERDECK_ACTIVE_MEMORY(deck)     (GET_OBJ_VAL((deck), 2))
-#define GET_CYBERDECK_TOTAL_STORAGE(deck)     (GET_OBJ_VAL((deck), 3))
-#define GET_CYBERDECK_IO_RATING(deck)         (GET_OBJ_VAL((deck), 4))
-#define GET_CYBERDECK_USED_STORAGE(deck)      (GET_OBJ_VAL((deck), 5))
-#define GET_CYBERDECK_RESPONSE_INCREASE(deck) (GET_OBJ_VAL((deck), 6))
-#define GET_CYBERDECK_IS_INCOMPLETE(deck)     (GET_OBJ_VAL((deck), 9))
-#define GET_CYBERDECK_FREE_STORAGE(deck)      (GET_CYBERDECK_TOTAL_STORAGE((deck)) -GET_CYBERDECK_USED_STORAGE((deck)))
+#define GET_CYBERDECK_MPCP(deck)               (GET_OBJ_VAL((deck), 0))
+#define GET_CYBERDECK_HARDENING(deck)          (GET_OBJ_VAL((deck), 1))
+#define GET_CYBERDECK_ACTIVE_MEMORY(deck)      (GET_OBJ_VAL((deck), 2))
+#define GET_CYBERDECK_TOTAL_STORAGE(deck)      (GET_OBJ_VAL((deck), 3))
+#define GET_CYBERDECK_IO_RATING(deck)          (GET_OBJ_VAL((deck), 4))
+#define GET_CYBERDECK_USED_STORAGE(deck)       (GET_OBJ_VAL((deck), 5))
+#define GET_CYBERDECK_RESPONSE_INCREASE(deck)  (GET_OBJ_VAL((deck), 6))
+#define GET_CYBERDECK_IS_INCOMPLETE(deck)      (GET_OBJ_VAL((deck), 9))
+#define GET_CYBERDECK_FREE_STORAGE(deck)       (GET_CYBERDECK_TOTAL_STORAGE((deck)) -GET_CYBERDECK_USED_STORAGE((deck)))
 
 // ITEM_PROGRAM convenience defines
 

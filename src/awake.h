@@ -320,6 +320,7 @@ enum {
 
 /* preference flags: used by char_data.player_specials.pref */
 
+// If you add to this list, also add to constant.cpp's preference_bits[].
 #define PRF_PACIFY              0
 #define PRF_COMPACT             1 
 #define PRF_AUTOEXIT            2  /* Display exits in a room       */
@@ -364,10 +365,13 @@ enum {
 #define PRF_SCREENREADER        43
 #define PRF_NOCOLOR             44
 #define PRF_NOPROMPT            45
-#define PRF_MAX   		          46
+#define PRF_HELPLOG             46
+#define PRF_PURGELOG            47
+#define PRF_MAX   		          48
 
 /* log watch */
 
+// If you add to this list, also add the name of your new log type to constants.cpp's log_types[].
 #define LOG_CONNLOG        0
 #define LOG_DEATHLOG       1
 #define LOG_MISCLOG        2
@@ -380,6 +384,8 @@ enum {
 #define LOG_GRIDLOG	       9
 #define LOG_WRECKLOG	     10
 #define LOG_PGROUPLOG      11
+#define LOG_HELPLOG        12
+#define LOG_PURGELOG       13
 
 /* player conditions */
 
@@ -1069,6 +1075,7 @@ enum {
 #define ITEM_WEAR_MAX    25
 
 /* extra object flags: used by obj_data.obj_flags.extra_flags */
+/* see: https://github.com/luciensadi/AwakeMUD/wiki/Item-Extra-Flags */
 
 #define ITEM_GLOW          0     /* Item is glowing              */
 #define ITEM_HUM           1     /* Item is humming              */
@@ -1086,15 +1093,15 @@ enum {
 #define ITEM_COMPBURST     13    /* Weapon requires complex action to use burst fire */
 #define ITEM_VOLATILE      14    /* connected item loaded in ip zone */
 #define ITEM_WIZLOAD       15    /* item was loaded by an immortal */
-#define ITEM_NOTROLL    16
-#define ITEM_NOELF    17
-#define ITEM_NODWARF    18
-#define ITEM_NOORK    19
-#define ITEM_NOHUMAN    20
-#define ITEM_SNIPER      21
-#define ITEM_IMMLOAD       22 
-#define ITEM_EXTRA_MAX    23
-/* always keep immload the last */
+#define ITEM_NOTROLL       16
+#define ITEM_NOELF         17
+#define ITEM_NODWARF       18
+#define ITEM_NOORK         19
+#define ITEM_NOHUMAN       20
+#define ITEM_SNIPER        21
+#define ITEM_IMMLOAD       22
+#define ITEM_NERPS         23    /* Item does not actually have any coded effect. */
+#define ITEM_EXTRA_MAX     24
 
 /* Ammo types */ 
 #define AMMO_NORMAL     0
@@ -1291,6 +1298,7 @@ enum {
 #define BIO_TAILOREDPHEREMONES	16
 #define BIO_TOXINEXTRACTOR	17
 #define BIO_TRACHEALFILTER	18
+// Everything past this line is assumed to be cultured by default. If you add more that's not cultured, change the cultured check in db.cpp.
 #define BIO_CEREBRALBOOSTER	19
 #define BIO_DAMAGECOMPENSATOR	20
 #define BIO_PAINEDITOR		21
@@ -1299,6 +1307,9 @@ enum {
 #define BIO_THERMOSENSEORGAN	24
 #define BIO_TRAUMADAMPNER	25
 #define NUM_BIOWARE		26
+
+#define BIOWARE_STANDARD 0
+#define BIOWARE_CULTURED 1
 
 /* program types */
 #define SOFT_BOD                1
@@ -2012,7 +2023,7 @@ enum {
 #define RM_NEWBIE_LOBBY             60563
 #define RM_ENTRANCE_TO_DANTES       35500
 #define RM_DANTES_GARAGE            35693
-#define RM_DANTES_GARAGE_RANDOM     35693 + number(0,4)
+#define RM_DANTES_GARAGE_RANDOM     (35693 + number(0,4))
 #define RM_DANTES_DESCENT           35502
 #define RM_SEATTLE_DOCWAGON         RM_ENTRANCE_TO_DANTES
 #define RM_PORTLAND_DOCWAGON        RM_ENTRANCE_TO_DANTES
@@ -2052,6 +2063,8 @@ enum {
 #define OBJ_BLANK_PART_DESIGN      112
 #define OBJ_CUSTOM_CYBERDECK_SHELL 113
 #define OBJ_DOCWAGON_BASIC_MOD     601
+#define OBJ_SEATTLE_TAXI_SIGN      600
+#define OBJ_PORTLAND_TAXI_SIGN     699
 
 /* ban struct */
 struct ban_list_element
@@ -2143,5 +2156,16 @@ struct ban_list_element
 #ifdef USE_DEBUG_CANARIES
 #define CANARY_VALUE 31337
 #endif
+
+// MySQL constraints.
+#define MYSQL_SIGNED_TINYINT_MAX     127
+#define MYSQL_UNSIGNED_TINYINT_MAX   255
+#define MYSQL_SIGNED_SMALLINT_MAX    32767
+#define MYSQL_UNSIGNED_SMALLINT_MAX  65535
+#define MYSQL_SIGNED_MEDIUMINT_MAX   8388607
+#define MYSQL_UNSIGNED_MEDIUMINT_MAX 16777215
+#define MYSQL_SIGNED_INT_MAX         2147483647
+#define MYSQL_UNSIGNED_INT_MAX       4294967295
+// Bigint takes 2^63-1 signed, 2^64-1 unsigned. You probably don't need to care about it.
 
 #endif

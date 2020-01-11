@@ -195,8 +195,8 @@ void objList::UpdateCounters(void)
       continue;
     }
     
-    // Decrement the attempt counter (mostly used by credstick cracking).
-    if (GET_OBJ_ATTEMPT(OBJ) >  0)
+    // Decrement the attempt counter for credsticks.
+    if (GET_OBJ_TYPE(OBJ) == ITEM_MONEY && GET_OBJ_ATTEMPT(OBJ) > 0)
       GET_OBJ_ATTEMPT(OBJ)--;
 
     // Send out the trideo messages. We assume anything that is a trideo box is not anything else.
@@ -333,9 +333,14 @@ void objList::CallSpec()
   nodeStruct<struct obj_data *> *temp;
 
   char empty_argument = '\0';
-  for (temp = head; temp; temp = temp->next)
+  for (temp = head; temp; temp = temp->next) {
+    if (!temp->data) {
+      log("Warning-- found an object in the CallSpec list with null data.");
+      continue;
+    }
     if (GET_OBJ_SPEC(temp->data) != NULL)
       GET_OBJ_SPEC(temp->data) (NULL, temp->data, 0, &empty_argument);
+  }
 }
 
 void objList::RemoveObjNum(int num)

@@ -728,19 +728,22 @@ void mudlog(const char *str, struct char_data *ch, int log, bool file)
   ct = time(0);
   tmp = asctime(localtime(&ct));
   
-  if ( ch && ch->desc && ch->desc->original )
-    sprintf(buf2, "[%5ld] (%s) ",
-            get_ch_in_room(ch)->number,
-            GET_CHAR_NAME(ch));
-  else if (ch && ch->in_room)
-    sprintf(buf2, "[%5ld] ", ch->in_room->number);
-  else
-    strcpy(buf2, "");
+  // Fallback-- it's blank if we find no useful conditions.
+  strcpy(buf2, "");
+  
+  if (ch && (ch->in_room || ch->in_veh)) {
+    if (ch->desc)
+      sprintf(buf2, "[%5ld] (%s) ",
+              get_ch_in_room(ch)->number,
+              GET_CHAR_NAME(ch));
+    else
+      sprintf(buf2, "[%5ld] ", get_ch_in_room(ch)->number);
+  }
   
   if (file)
     fprintf(stderr, "%-19.19s :: %s: %s%s\n", tmp, log_types[log], buf2, str);
   
-  sprintf(buf, "^g[%s: %s%s]^n\r\n", log_types[log], buf2, str);
+  sprintf(buf, "^g[%s: %s%s^g]^n\r\n", log_types[log], buf2, str);
   
   for (i = descriptor_list; i; i = i->next)
     if (!i->connected)
@@ -754,9 +757,10 @@ void mudlog(const char *str, struct char_data *ch, int log, bool file)
                                    PLR_EDITING, ENDBIT))
         continue;
       
+      // We don't show log messages from imms who are invis at a level higher than you, unless you're a high enough level that that doesn't matter.
       if (ch
           && !access_level(tch, GET_INVIS_LEV(ch))
-          && !access_level(tch, LVL_BUILDER)) // Decreased from VICEPRES-- we already have priv checks to toggle logs in the first place.
+          && !access_level(tch, LVL_VICEPRES))
         continue;
       switch (log) {
         case LOG_CONNLOG:
@@ -794,6 +798,19 @@ void mudlog(const char *str, struct char_data *ch, int log, bool file)
           break;
         case LOG_PGROUPLOG:
           check_log = PRF_PGROUPLOG;
+          break;
+        case LOG_HELPLOG:
+          check_log = PRF_HELPLOG;
+          break;
+        case LOG_PURGELOG:
+          check_log = PRF_PURGELOG;
+          break;
+        default:
+          char errbuf[500];
+          sprintf(errbuf, "SYSERR: Attempting to display a message to log type %d, but that log type is not handled in utils.cpp's mudlog() function! Dumping to SYSLOG.", log);
+          mudlog(errbuf, NULL, LOG_SYSLOG, TRUE);
+          check_log = PRF_SYSLOG;
+          break;
       }
       if (PRF_FLAGGED(tch, check_log))
         SEND_TO_Q(buf, i);
@@ -810,13 +827,20 @@ void sprintbit(long vektor, const char *names[], char *result)
     strcpy(result, "SPRINTBIT ERROR!");
     return;
   }
+  
+  bool have_printed = FALSE;
   for (nr = 0; vektor; vektor >>= 1) {
     if (IS_SET(1, vektor)) {
       if (*names[nr] != '\n') {
+        if (have_printed) {
+          // Better formatting. Better coding. Papa Lucien's.
+          strcat(result, ", ");
+        }
         strcat(result, names[nr]);
-        strcat(result, " ");
-      } else
+      } else {
         strcat(result, "UNDEFINED ");
+      }
+      have_printed = TRUE;
     }
     if (*names[nr] != '\n')
       nr++;
@@ -2401,7 +2425,9 @@ void set_character_skill(struct char_data *ch, int skill_num, int new_value, boo
   if (send_message) {    
     // Active skill messaging.
     if (skills[skill_num].type == SKILL_TYPE_ACTIVE) {
-      if (new_value == 1) {
+      if (new_value == 0) {
+        send_to_char(ch, "You completely forget your skills in %s.\r\n", skills[skill_num].name);
+      } else if (new_value == 1) {
         send_to_char(ch, "^cYou have been introduced to the basics.^n\r\n");
       } else if (new_value == 2) {
         send_to_char(ch, "^cYou have gotten in some practice.^n\r\n");
@@ -2423,7 +2449,9 @@ void set_character_skill(struct char_data *ch, int skill_num, int new_value, boo
     }
     // Knowledge skill messaging.
     else {
-      if (new_value == 1) {
+      if (new_value == 0) {
+        send_to_char(ch, "You completely forget your knowledge of %s.\r\n", skills[skill_num].name);
+      } else if (new_value == 1) {
         send_to_char(ch, "^cYou've picked up a few things.^n\r\n");
       } else if (new_value == 2) {
         send_to_char(ch, "^cYou've developed an interest in %s.^n\r\n", skills[skill_num].name);
@@ -2568,4 +2596,146 @@ struct char_data *get_obj_possessor(struct obj_data *obj) {
     return owner;
   
   return get_obj_worn_by_recursive(obj);
+}
+
+// Creates a NEW loggable string from an object. YOU MUST DELETE [] THE OUTPUT OF THIS.
+char *generate_new_loggable_representation(struct obj_data *obj) {
+  char log_string[MAX_STRING_LENGTH];
+  memset(log_string, 0, sizeof(char) * MAX_STRING_LENGTH);
+  
+  if (!obj) {
+    strcpy(log_string, "SYSERR: Null object passed to generate_loggable_representation().");
+    mudlog(log_string, NULL, LOG_SYSLOG, TRUE);
+    return str_dup(log_string);
+  }
+  
+  sprintf(log_string, "(obj %ld) %s%s",
+          GET_OBJ_VNUM(obj),
+          obj->text.name,
+          IS_OBJ_STAT(obj, ITEM_WIZLOAD) ? " [wizloaded]" : "");
+    
+  if (obj->restring)
+    sprintf(ENDOF(log_string), " [restring: %s]", obj->restring);
+  
+  if (obj->contains) {
+    sprintf(ENDOF(log_string), ", containing: [");
+    for (struct obj_data *temp = obj->contains; temp; temp = temp->next_content) {
+      char *representation = generate_new_loggable_representation(temp);
+      sprintf(buf3, " %s%s%s",
+              (!temp->next_content && temp != obj->contains) ? "and " : "",
+              representation,
+              temp->next_content ? ";" : "");
+      strlcat(log_string, buf3, MAX_STRING_LENGTH);
+      delete [] representation;
+    }
+    strlcat(log_string, " ]", MAX_STRING_LENGTH);
+  }
+  
+  switch(GET_OBJ_TYPE(obj)) {
+    case ITEM_MONEY:
+      // The only time we'll ever hit perform_give with money is if it's a credstick.
+      sprintf(ENDOF(log_string), ", containing %d nuyen", GET_OBJ_VAL(obj, 0));
+      break;
+    case ITEM_DECK_ACCESSORY:
+      // Computer parts and optical chips.
+      if (GET_OBJ_VAL(obj, 0) == TYPE_PARTS) {
+        sprintf(ENDOF(log_string), ", containing %d nuyen worth of %s", GET_OBJ_COST(obj), GET_OBJ_VAL(obj, 1) ? "optical chips" : "parts");
+      }
+      break;
+    case ITEM_MAGIC_TOOL:
+      // Summoning materials.
+      if (GET_OBJ_VAL(obj, 0) == TYPE_SUMMONING) {
+        sprintf(ENDOF(log_string), ", containing %d nuyen worth of summoning materials", GET_OBJ_COST(obj));
+      }
+      break;
+    case ITEM_GUN_AMMO:
+      // A box of ammunition.
+      sprintf(ENDOF(log_string), ", containing %d units of %s %s ammo", GET_OBJ_VAL(obj, 0),
+              ammo_type[GET_OBJ_VAL(obj, 2)].name, weapon_type[GET_OBJ_VAL(obj, 1)]);
+      break;
+    default:
+      break;
+  }
+  
+  return str_dup(log_string);
+}
+
+// Purging a vehicle? Call this function to log it.
+void purgelog(struct veh_data *veh) {
+  char internal_buffer[MAX_STRING_LENGTH];
+  const char *representation = NULL;
+  
+  // Begin the purgelog entry.
+  sprintf(internal_buffer, "- Writing purgelog for vehicle %s (vnum %ld, idnum %ld, owned by %ld).", GET_VEH_NAME(veh), GET_VEH_VNUM(veh), veh->idnum, veh->owner);
+  mudlog(internal_buffer, NULL, LOG_PURGELOG, TRUE);
+  
+  // Log its mounts.
+  for (struct obj_data *mount = veh->mount; mount; mount = mount->next_content) {
+    representation = generate_new_loggable_representation(mount);
+    sprintf(internal_buffer, "- Mount: %s", representation);
+    mudlog(internal_buffer, NULL, LOG_PURGELOG, TRUE);
+    delete [] representation;
+  }
+  
+  // Log its mods.
+  for (int x = 0; x < NUM_MODS; x++) {
+    if (!GET_MOD(veh, x))
+      continue;
+    
+    representation = generate_new_loggable_representation(GET_MOD(veh, x));
+    sprintf(internal_buffer, "- Mod attached to the %s: %s", mod_name[x], representation);
+    mudlog(internal_buffer, NULL, LOG_PURGELOG, TRUE);
+    delete [] representation;
+  }
+  
+  // Log its contained objects.
+  for (struct obj_data *obj = veh->contents; obj; obj = obj->next_content) {
+    representation = generate_new_loggable_representation(obj);
+    sprintf(internal_buffer, "- Contained object: %s", representation);
+    mudlog(internal_buffer, NULL, LOG_PURGELOG, TRUE);
+    delete [] representation;
+  }
+  
+  // End the purgelog entry.
+  sprintf(internal_buffer, "- End purgelog for %s.", GET_VEH_NAME(veh));
+  mudlog(internal_buffer, NULL, LOG_PURGELOG, TRUE);
+}
+
+// Copy Source into Dest, replacing the target substring in Source with the specified replacement.
+// Requirement: dest's max size must be greater than source's current size plus all the replacements being done in it.
+char *replace_substring(char *source, char *dest, const char *replace_target, const char *replacement) {
+  const char *replace_target_ptr = replace_target;
+  char *dest_ptr = dest;
+  
+  *dest = '\0';
+  
+  for (unsigned long i = 0; i < strlen(source); i++) {
+    // Compare the source to our replacement target pointer and increment RTP.
+    if (source[i] == *(replace_target_ptr)) {
+      // If they are equal, check to see if we've reached the end of RTP.
+      if (!*(++replace_target_ptr)) {
+        // If we have, we've matched the full thing. Plop the replacement into dest and reset.
+        for (unsigned long j = 0; j < strlen(replacement); j++)
+          *(dest_ptr++) = *(replacement + j);
+        replace_target_ptr = replace_target;
+      } else {
+        // If we haven't, do nothing-- just continue.
+      }
+    } else {
+      // They're not equal. If we've incremented RTP, we know we've skipped characters, so it's time to unwind that.
+      for (unsigned long diff = replace_target_ptr - replace_target; diff > 0; diff--) {
+        *(dest_ptr++) = source[i-diff];
+      }
+        
+      // Now, reset RTP and copy the most recent character directly.
+      replace_target_ptr = replace_target;
+      *(dest_ptr++) = source[i];
+    }
+  }
+  
+  // Finally, null-termanate dest.
+  *dest_ptr = '\0';
+  
+  // Return the dest they gave us.
+  return dest;
 }

@@ -121,6 +121,8 @@ void appear(struct char_data * ch)
                            AFF_INVISIBLE,
                            AFF_HIDE, ENDBIT);
   
+  // TODO: Go through all sustained spells in the game and remove those that are causing this character to be invisible.
+  
   if (!IS_SENATOR(ch))
     act("$n slowly fades into existence.", FALSE, ch, 0, 0, TO_ROOM);
   else
@@ -469,7 +471,7 @@ void make_corpse(struct char_data * ch)
   }
   
   if (IS_NPC(ch) && (nuyen > 0 || credits > 0))
-    if (from_ip_zone(GET_MOB_VNUM(ch)))
+    if (vnum_from_non_connected_zone(GET_MOB_VNUM(ch)))
     {
       nuyen = 0;
       credits = 0;
@@ -741,7 +743,7 @@ int calc_karma(struct char_data *ch, struct char_data *vict)
   base = MAX(base, 1);
   
   if (ch && !IS_NPC(ch) && !IS_SENATOR(ch) && IS_NPC(vict))
-    if (from_ip_zone(GET_MOB_VNUM(vict)))
+    if (vnum_from_non_connected_zone(GET_MOB_VNUM(vict)))
       base = 0;
   
   
@@ -2061,7 +2063,7 @@ bool can_hurt(struct char_data *ch, struct char_data *victim, int attacktype) {
              && !IS_NPC(ch->master)
              && IS_SENATOR(ch->master)
              && !access_level(ch->master, LVL_ADMIN)))
-        && !from_ip_zone(GET_MOB_VNUM(victim)))
+        && !vnum_from_non_connected_zone(GET_MOB_VNUM(victim)))
     {
       return false;
     }
@@ -2089,6 +2091,15 @@ bool damage(struct char_data *ch, struct char_data *victim, int dam, int attackt
   ACMD_DECLARE(do_disconnect);
   ACMD_CONST(do_return);
   
+  if (!ch) {
+    mudlog("SYSERR: NULL ch passed to damage()! Aborting call, nobody takes damage this time.", victim, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  if (!victim) {
+    mudlog("SYSERR: NULL victim passed to damage()! Aborting call, nobody takes damage this time.", ch, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  
   if (GET_POS(victim) <= POS_DEAD)
   {
     log("SYSERR: Attempt to damage a corpse.");
@@ -2108,7 +2119,7 @@ bool damage(struct char_data *ch, struct char_data *victim, int dam, int attackt
            && !access_level(ch->master, LVL_ADMIN)))
       && IS_NPC(victim)
       && dam > 0
-      && !from_ip_zone(GET_MOB_VNUM(victim)))
+      && !vnum_from_non_connected_zone(GET_MOB_VNUM(victim)))
   {
     dam = -1;
     buf_mod(rbuf,"Invalid",dam);
@@ -2588,8 +2599,11 @@ int check_recoil(struct char_data *ch, struct obj_data *gun)
           comp += RECOIL_COMP_VALUE_BIPOD;
         else if (GET_OBJ_VAL(obj, 1) == ACCESS_TRIPOD)
           comp += RECOIL_COMP_VALUE_TRIPOD;
-        
       }
+      
+      // Add in integral recoil compensation.
+      if (GET_WEAPON_INTEGRAL_RECOIL_COMP(obj))
+        comp += GET_WEAPON_INTEGRAL_RECOIL_COMP(obj);
     }
   }
   for (obj = ch->cyberware; obj; obj = obj->next_content)
@@ -3609,6 +3623,10 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
     // Adepts get bonus dice when counterattacking. Ip Man approves.
     def->dice += GET_POWER(def->ch, ADEPT_COUNTERSTRIKE);
     
+    // Bugfix: If you're unconscious or mortally wounded, you don't get to counterattack.
+    if (GET_PHYSICAL(def->ch) <= 0 || GET_MENTAL(def->ch) <= 0)
+      def->dice = 0;
+    
     // Calculate the net reach.
     int net_reach = GET_REACH(att->ch) - GET_REACH(def->ch);
     
@@ -3618,24 +3636,26 @@ void hit(struct char_data *attacker, struct char_data *victim, struct obj_data *
     
     // -------------------------------------------------------------------------------------------------------
     // Calculate and display pre-success-test information.
-    sprintf( rbuf, "%s", GET_CHAR_NAME( att->ch ) );
-    rbuf[3] = 0;
-    sprintf( rbuf+strlen(rbuf), "|%s", GET_CHAR_NAME( def->ch ) );
-    rbuf[7] = 0;
-    sprintf( rbuf+strlen(rbuf), ">Targ: (Base 4) ");
     
+    sprintf( rbuf, "Attacker dice %s", GET_CHAR_NAME( att->ch ) );
+    rbuf[3] = 0;
     att->tn += modify_target_rbuf_raw(att->ch, rbuf, att->modifiers[COMBAT_MOD_VISIBILITY]) - MAX(net_reach, 0);
     for (int mod_index = 0; mod_index < NUM_COMBAT_MODIFIERS; mod_index++) {
       buf_mod(rbuf, combat_modifiers[mod_index], att->modifiers[mod_index]);
       att->tn += att->modifiers[mod_index];
     }
     
+    sprintf( rbuf+strlen(rbuf), "\r\nDefender dice %s%s", GET_CHAR_NAME( def->ch ),
+            (GET_PHYSICAL(def->ch) <= 0 || GET_MENTAL(def->ch) <= 0) ? " (incap)" : "" );
+    rbuf[7] = 0;
     def->tn += modify_target_rbuf_raw(att->ch, NULL, def->modifiers[COMBAT_MOD_VISIBILITY]);
     for (int mod_index = 0; mod_index < NUM_COMBAT_MODIFIERS; mod_index++) {
+      buf_mod(rbuf, combat_modifiers[mod_index], att->modifiers[mod_index]);
       def->tn += def->modifiers[mod_index];
     }
     
-    buf_roll( rbuf, "Total", att->tn);
+    buf_roll(rbuf, "Attacker TN", att->tn);
+    buf_roll(rbuf, "Defender TN", def->tn);
     act( rbuf, 1, att->ch, NULL, NULL, TO_ROLLS );
 
     // ----------------------
@@ -5059,7 +5079,8 @@ void vram(struct veh_data * veh, struct char_data * ch, struct veh_data * tveh)
     
     sprintf(buf, "You ram a %s!\r\n", GET_VEH_NAME(tveh));
     sprintf(buf1, "%s rams straight into your ride!\r\n", GET_VEH_NAME(veh));
-    sprintf(buf2, "%s rams straight into %s!\r\n", GET_VEH_NAME(veh), GET_VEH_NAME(tveh));
+    strcpy(buf3, GET_VEH_NAME(veh));
+    sprintf(buf2, "%s rams straight into %s!\r\n", buf3, GET_VEH_NAME(tveh));
     send_to_veh(buf, veh, NULL, TRUE);
     send_to_veh(buf1, tveh, NULL, TRUE);
     send_to_room(buf2, veh->in_room);
@@ -5291,7 +5312,9 @@ void vcombat(struct char_data * ch, struct veh_data * veh)
   veh->damage += damage_total;
   if (veh->owner && !IS_NPC(ch))
   {
-    sprintf(buf, "%s attacked vehicle (%s) owned by player %s (%ld).", GET_CHAR_NAME(ch), GET_VEH_NAME(veh), get_player_name(veh->owner), veh->owner);
+    char *cname = get_player_name(veh->owner);
+    sprintf(buf, "%s attacked vehicle (%s) owned by player %s (%ld).", GET_CHAR_NAME(ch), GET_VEH_NAME(veh), cname, veh->owner);
+    delete [] cname;
     mudlog(buf, ch, LOG_WRECKLOG, TRUE);
   }
   chkdmg(veh);

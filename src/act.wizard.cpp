@@ -205,9 +205,10 @@ ACMD(do_olcon)
   else
     olc_state = 0;
 
-  sprintf(buf, "OLC turned %s by %s.", ONOFF(olc_state),
-          GET_CHAR_NAME(ch));
+  sprintf(buf, "OLC turned %s by %s.", ONOFF(olc_state), GET_CHAR_NAME(ch));
   mudlog(buf, ch, LOG_WIZLOG, TRUE);
+  
+  send_to_char(ch, "You turn the global OLC system %s.\r\n", ONOFF(olc_state));
 }
 
 
@@ -1333,8 +1334,12 @@ void do_stat_mobile(struct char_data * ch, struct char_data * k)
     break;
   }
   send_to_char(ch, "%s ", pc_race_types[(int)GET_RACE(k)]);
-  sprintf(buf2, " %s '%s', In room [%5ld]\r\n", (!IS_MOB(k) ? "NPC" : "MOB"),
-          GET_NAME(k), k->in_room->number);
+  if (k->in_room)
+    sprintf(buf2, " %s '%s', In room [%5ld]\r\n", (!IS_MOB(k) ? "NPC" : "MOB"), GET_NAME(k), k->in_room->number);
+  else if (k->in_veh)
+    sprintf(buf2, " %s '%s', In veh [%s]\r\n", (!IS_MOB(k) ? "NPC" : "MOB"), GET_NAME(k), GET_VEH_NAME(k->in_veh));
+  else
+    sprintf(buf2, " %s '%s'\r\n", (!IS_MOB(k) ? "NPC" : "MOB"), GET_NAME(k));
   strcat(buf, buf2);
 
   sprintf(ENDOF(buf), "Alias: %s, VNum: [%5ld], RNum: [%5ld]\r\n", GET_KEYWORDS(k),
@@ -1814,7 +1819,7 @@ ACMD(do_wizload)
       return;
     }
     veh = read_vehicle(r_num, REAL);
-    veh_to_room(veh, ch->in_room);
+    veh_to_room(veh, get_ch_in_room(ch));
     act("$n makes a quaint, magical gesture with one hand.", TRUE, ch,
         0, 0, TO_ROOM);
     sprintf(buf, "%s wizloaded vehicle #%d (%s).",
@@ -1827,7 +1832,7 @@ ACMD(do_wizload)
       return;
     }
     mob = read_mobile(r_num, REAL);
-    char_to_room(mob, ch->in_room);
+    char_to_room(mob, get_ch_in_room(ch));
 
     act("$n makes a quaint, magical gesture with one hand.", TRUE, ch,
         0, 0, TO_ROOM);
@@ -1931,21 +1936,34 @@ ACMD(do_purge)
 
       if (!IS_NPC(vict)) {
         sprintf(buf, "%s has purged %s.", GET_CHAR_NAME(ch), GET_NAME(vict));
-        mudlog(buf, ch, LOG_WIZLOG, TRUE);
+        mudlog(buf, ch, LOG_PURGELOG, TRUE);
         if (vict->desc) {
           close_socket(vict->desc);
           vict->desc = NULL;
         }
       }
       extract_char(vict);
-    } else if ((obj = get_obj_in_list_vis(ch, buf, ch->in_veh ? ch->in_veh->contents : ch->in_room->contents))) {
+      send_to_char(OK, ch);
+      return;
+    }
+    
+    if ((obj = get_obj_in_list_vis(ch, buf, ch->in_veh ? ch->in_veh->contents : ch->in_room->contents))) {
       act("$n destroys $p.", FALSE, ch, obj, 0, TO_ROOM);
+      const char *representation = generate_new_loggable_representation(obj);
+      sprintf(buf, "%s has purged %s.", GET_CHAR_NAME(ch), representation);
+      delete [] representation;
+      mudlog(buf, ch, LOG_PURGELOG, TRUE);
       extract_obj(obj);
-    } else if ((veh = get_veh_list(buf, ch->in_veh ? ch->in_veh->carriedvehs : ch->in_room->vehicles, ch))) {
+      send_to_char(OK, ch);
+      return;
+    }
+    
+    if ((veh = get_veh_list(buf, ch->in_veh ? ch->in_veh->carriedvehs : ch->in_room->vehicles, ch))) {
       sprintf(buf1, "$n purges %s.", GET_VEH_NAME(veh));
       act(buf1, FALSE, ch, NULL, 0, TO_ROOM);
       sprintf(buf1, "%s purged %s.", GET_CHAR_NAME(ch), GET_VEH_NAME(veh));
       mudlog(buf1, ch, LOG_WIZLOG, TRUE);
+      purgelog(veh);
       extract_veh(veh);
     } else {
       send_to_char("Nothing here by that name.\r\n", ch);
@@ -1959,12 +1977,19 @@ ACMD(do_purge)
       
       for (vict = ch->in_veh->people; vict; vict = next_v) {
         next_v = vict->next_in_veh;
-        if (IS_NPC(vict))
+        if (IS_NPC(vict) && vict != ch) {
+          sprintf(buf, "%s has purged %s.", GET_CHAR_NAME(ch), GET_NAME(vict));
+          mudlog(buf, ch, LOG_PURGELOG, TRUE);
           extract_char(vict);
+        }
       }
       
       for (obj = ch->in_veh->contents; obj; obj = next_o) {
         next_o = obj->next_content;
+        const char *representation = generate_new_loggable_representation(obj);
+        sprintf(buf, "%s has purged %s.", GET_CHAR_NAME(ch), representation);
+        mudlog(buf, ch, LOG_PURGELOG, TRUE);
+        delete [] representation;
         extract_obj(obj);
       }
       
@@ -1972,28 +1997,44 @@ ACMD(do_purge)
         next_ve = veh->next;
         if (veh == ch->in_veh)
           continue;
+        sprintf(buf1, "%s has purged %s.", GET_CHAR_NAME(ch), GET_VEH_NAME(veh));
+        mudlog(buf1, ch, LOG_WIZLOG, TRUE);
+        purgelog(veh);
         extract_veh(veh);
       }
+      
+      send_to_veh("The world seems a little cleaner.\r\n", ch->in_veh, NULL, FALSE);
     }
     else {
       act("$n gestures... You are surrounded by scorching flames!", FALSE, ch, 0, 0, TO_ROOM);
-      send_to_room("The world seems a little cleaner.\r\n", ch->in_room);
 
       for (vict = ch->in_room->people; vict; vict = next_v) {
         next_v = vict->next_in_room;
-        if (IS_NPC(vict) && vict != ch)
+        if (IS_NPC(vict) && vict != ch) {
+          sprintf(buf, "%s has purged %s.", GET_CHAR_NAME(ch), GET_NAME(vict));
+          mudlog(buf, ch, LOG_PURGELOG, TRUE);
           extract_char(vict);
+        }
       }
 
       for (obj = ch->in_room->contents; obj; obj = next_o) {
         next_o = obj->next_content;
+        const char *representation = generate_new_loggable_representation(obj);
+        sprintf(buf, "%s has purged %s.", GET_CHAR_NAME(ch), representation);
+        mudlog(buf, ch, LOG_PURGELOG, TRUE);
+        delete [] representation;
         extract_obj(obj);
       }
       
       for (veh = ch->in_room->vehicles; veh; veh = next_ve) {
         next_ve = veh->next_veh;
+        sprintf(buf1, "%s has purged %s.", GET_CHAR_NAME(ch), GET_VEH_NAME(veh));
+        mudlog(buf1, ch, LOG_WIZLOG, TRUE);
+        purgelog(veh);
         extract_veh(veh);
       }
+      
+      send_to_room("The world seems a little cleaner.\r\n", ch->in_room);
     }
   }
 }
@@ -2126,6 +2167,12 @@ ACMD(do_award)
   }
   if (!(vict = get_char_vis(ch, arg))) {
     send_to_char(NOPERSON, ch);
+    return;
+  }
+  
+  if (GET_KARMA(vict) + k > MYSQL_UNSIGNED_MEDIUMINT_MAX) {
+    send_to_char(ch, "That would put %s over the karma maximum. You may award up to %d points of karma. Otherwise, tell %s to spend what %s has, or compensate %s some other way.\r\n",
+                 GET_CHAR_NAME(vict), MYSQL_UNSIGNED_MEDIUMINT_MAX - GET_KARMA(vict), HMHR(vict), HSSH(vict), HMHR(vict));
     return;
   }
 
@@ -3010,14 +3057,14 @@ ACMD(do_show)
                { "rent",           LVL_BUILDER },
                { "stats",          LVL_ADMIN },
                { "errors",         LVL_ADMIN },
-               { "death",          LVL_ADMIN },
+               { "deathrooms",     LVL_ADMIN },
                { "godrooms",       LVL_BUILDER },
                { "skills",         LVL_BUILDER },
                { "spells",         LVL_BUILDER },
                { "prompt",         LVL_ADMIN },
-               { "lodge",          LVL_ADMIN },
+               { "lodges",         LVL_ADMIN },
                { "library",        LVL_ADMIN },
-               { "jackpoint",      LVL_BUILDER },
+               { "jackpoints",     LVL_BUILDER },
                { "abilities",      LVL_BUILDER },
                { "aliases",        LVL_ADMIN },
                { "metamagic",      LVL_BUILDER },
@@ -3050,6 +3097,7 @@ ACMD(do_show)
     self = 1;
   buf[0] = '\0';
   switch (l) {
+      // Did someone seriously write a list with magic-number indexes and use that as a key for which command we're using? WTF -LS
   case 1:                     /* zone */
     /* tightened up by JE 4/6/93 */
     if (self) {
@@ -3164,7 +3212,7 @@ ACMD(do_show)
       if (ROOM_FLAGGED(&world[i], ROOM_DEATH))
         sprintf(buf, "%s%2d: [%5ld] %s %s\r\n", buf, ++j,
                 world[i].number,
-                from_ip_zone(world[i].number) ? " " : "*",
+                vnum_from_non_connected_zone(world[i].number) ? " " : "*",
                 world[i].name);
     send_to_char(buf, ch);
     break;
@@ -3175,7 +3223,7 @@ ACMD(do_show)
     for (i = 0, j = 0; i <= zone_table[real_zone(GOD_ROOMS_ZONE)].top; i++)
       if (world[i].zone == GOD_ROOMS_ZONE && i > 1 && !(i >= 8 && i <= 12))
         sprintf(buf, "%s%2d: [%5ld] %s %s\r\n", buf, j++, world[i].number,
-                from_ip_zone(world[i].number) ? " " : "*",
+                vnum_from_non_connected_zone(world[i].number) ? " " : "*",
                 world[i].name);
     send_to_char(buf, ch);
     break;
@@ -3252,7 +3300,7 @@ ACMD(do_show)
     strcpy(buf, "Jackpoints\r\n---------\r\n");
     for (i = 0, j = 0; i <= top_of_world; i++)
       if (world[i].matrix > 0)
-        sprintf(buf + strlen(buf), "%2d: [%5ld] %s (%ld/%ld)\r\n", ++j,
+        sprintf(buf + strlen(buf), "%2d: [%5ld] %s^n (%ld/%ld)\r\n", ++j,
                 world[i].number, world[i].name, world[i].matrix, world[i].rtg);
     send_to_char(buf, ch);
     break;
@@ -3765,7 +3813,7 @@ ACMD(do_set)
 
     break;
   case 25:
-    RANGE(0, 1000000);
+    RANGE(0, MYSQL_UNSIGNED_MEDIUMINT_MAX);
     //GET_KARMA(vict) = value;
     vict->points.karma = value;
     break;
@@ -4031,7 +4079,7 @@ ACMD(do_logwatch)
   one_argument(argument, buf);
 
   if (!*buf) {
-    sprintf(buf, "You are currently watching the following:\r\n%s%s%s%s%s%s%s%s%s%s%s",
+    sprintf(buf, "You are currently watching the following:\r\n%s%s%s%s%s%s%s%s%s%s%s%s%s",
             (PRF_FLAGGED(ch, PRF_CONNLOG) ? "  ConnLog\r\n" : ""),
             (PRF_FLAGGED(ch, PRF_DEATHLOG) ? "  DeathLog\r\n" : ""),
             (PRF_FLAGGED(ch, PRF_MISCLOG) ? "  MiscLog\r\n" : ""),
@@ -4042,7 +4090,9 @@ ACMD(do_logwatch)
             (PRF_FLAGGED(ch, PRF_BANLOG) ? "  BanLog\r\n" : ""),
             (PRF_FLAGGED(ch, PRF_GRIDLOG) ? "  GridLog\r\n" : ""),
             (PRF_FLAGGED(ch, PRF_WRECKLOG) ? "  WreckLog\r\n" : ""),
-            (PRF_FLAGGED(ch, PRF_PGROUPLOG) ? "  PGroupLog\r\n" : ""));
+            (PRF_FLAGGED(ch, PRF_PGROUPLOG) ? "  PGroupLog\r\n" : ""),
+            (PRF_FLAGGED(ch, PRF_HELPLOG) ? "  HelpLog\r\n" : ""),
+            (PRF_FLAGGED(ch, PRF_PURGELOG) ? "  PurgeLog\r\n" : ""));
 
     send_to_char(buf, ch);
     return;
@@ -4150,6 +4200,26 @@ ACMD(do_logwatch)
     } else {
       send_to_char("You aren't permitted to view that log at your level.\r\n", ch);
     }
+  } else if (is_abbrev(buf, "helplog")) {
+    if (PRF_FLAGGED(ch, PRF_HELPLOG)) {
+      send_to_char("You no longer watch the HelpLog.\r\n", ch);
+      PRF_FLAGS(ch).RemoveBit(PRF_HELPLOG);
+    } else if (access_level(ch, LVL_DEVELOPER)) {
+      send_to_char("You will now see the HelpLog.\r\n", ch);
+      PRF_FLAGS(ch).SetBit(PRF_HELPLOG);
+    } else {
+      send_to_char("You aren't permitted to view that log at your level.\r\n", ch);
+    }
+  } else if (is_abbrev(buf, "purgelog")) {
+    if (PRF_FLAGGED(ch, PRF_PURGELOG)) {
+      send_to_char("You no longer watch the PurgeLog.\r\n", ch);
+      PRF_FLAGS(ch).RemoveBit(PRF_PURGELOG);
+    } else if (access_level(ch, LVL_ARCHITECT)) {
+      send_to_char("You will now see the PurgeLog.\r\n", ch);
+      PRF_FLAGS(ch).SetBit(PRF_PURGELOG);
+    } else {
+      send_to_char("You aren't permitted to view that log at your level.\r\n", ch);
+    }
   } else if (is_abbrev(buf, "all")) {
     if (!PRF_FLAGGED(ch, PRF_CONNLOG))
       PRF_FLAGS(ch).SetBit(PRF_CONNLOG);
@@ -4173,11 +4243,15 @@ ACMD(do_logwatch)
       PRF_FLAGS(ch).SetBit(PRF_CHEATLOG);
     if (!PRF_FLAGGED(ch, PRF_PGROUPLOG) && access_level(ch, LVL_VICEPRES))
       PRF_FLAGS(ch).SetBit(PRF_PGROUPLOG);
+    if (!PRF_FLAGGED(ch, PRF_HELPLOG) && access_level(ch, LVL_DEVELOPER))
+      PRF_FLAGS(ch).SetBit(PRF_HELPLOG);
+    if (!PRF_FLAGGED(ch, PRF_PURGELOG) && access_level(ch, LVL_ARCHITECT))
+      PRF_FLAGS(ch).SetBit(PRF_PURGELOG);
     send_to_char("All available logs have been activated.\r\n", ch);
   } else if (is_abbrev(buf, "none")) {
     PRF_FLAGS(ch).RemoveBits(PRF_CONNLOG, PRF_DEATHLOG, PRF_MISCLOG, PRF_WIZLOG,
                              PRF_SYSLOG, PRF_ZONELOG, PRF_CHEATLOG, PRF_BANLOG, PRF_GRIDLOG,
-                             PRF_WRECKLOG, PRF_PGROUPLOG, ENDBIT);
+                             PRF_WRECKLOG, PRF_PGROUPLOG, PRF_HELPLOG, PRF_PURGELOG, ENDBIT);
     send_to_char("All logs have been disabled.\r\n", ch);
   } else
     send_to_char("Watch what log?\r\n", ch);
@@ -4407,13 +4481,15 @@ ACMD(do_ilist)
 
   sprintf(buf, "Objects, %d to %d:\r\n", first, last);
 
-  for (nr = MAX(0, real_object(first)); nr <= top_of_objt &&
-       (OBJ_VNUM_RNUM(nr) <= last); nr++)
-    if (OBJ_VNUM_RNUM(nr) >= first)
-      sprintf(buf + strlen(buf), "%5d. [%5ld -%2d] %s\r\n", ++found,
-              OBJ_VNUM_RNUM(nr),
-              ObjList.CountObj(nr),
-              obj_proto[nr].text.name);
+  for (nr = MAX(0, real_object(first)); nr <= top_of_objt && (OBJ_VNUM_RNUM(nr) <= last); nr++) {
+    if (OBJ_VNUM_RNUM(nr) >= first) {
+      sprintf(buf + strlen(buf), "%5d. [%5ld -%2d] %s%s\r\n", ++found,
+      OBJ_VNUM_RNUM(nr),
+      ObjList.CountObj(nr),
+      obj_proto[nr].text.name,
+      obj_proto[nr].source_info ? "  ^g(canon)^n" : "");
+    }
+  }
 
   if (!found)
     send_to_char("No objects where found in those parameters.\r\n", ch);
@@ -4701,7 +4777,7 @@ ACMD(do_slist)
     if (shop_table[nr].vnum >= first)
       sprintf(buf + strlen(buf), "%5d. [%5ld] %s %s (%ld)\r\n", ++found,
               shop_table[nr].vnum,
-              from_ip_zone(shop_table[nr].keeper) ? " " : "*",
+              vnum_from_non_connected_zone(shop_table[nr].keeper) ? " " : "*",
               real_mobile(shop_table[nr].keeper) < 0 ? "None" : GET_NAME(&mob_proto[real_mobile(shop_table[nr].keeper)]),
               shop_table[nr].keeper);
 

@@ -284,8 +284,6 @@ void do_start(struct char_data * ch)
 
   ch->char_specials.saved.left_handed = (!number(0, 9) ? 1 : 0);
 
-  advance_level(ch);
-
   GET_PHYSICAL(ch) = GET_MAX_PHYSICAL(ch);
   GET_MENTAL(ch) = GET_MAX_MENTAL(ch);
 
@@ -296,9 +294,21 @@ void do_start(struct char_data * ch)
 
   PLR_FLAGS(ch).SetBit(PLR_NEWBIE);
   PRF_FLAGS(ch).SetBits(PRF_AUTOEXIT, PRF_LONGEXITS, ENDBIT);
+  PRF_FLAGS(ch).RemoveBit(PRF_NOHASSLE);
   PLR_FLAGS(ch).SetBit(PLR_AUTH);
   ch->player.time.played = 0;
   ch->player.time.lastdisc = time(0);
+
+  // Clear all their skills except for English.
+  for (int i = SKILL_ATHLETICS; i < MAX_SKILLS; i++) {
+    if (i == SKILL_ENGLISH)
+      set_character_skill(ch, i, 8, FALSE);
+    else
+      set_character_skill(ch, i, 0, FALSE);
+  }
+  
+  // For morts, this just saves them and prints a message about their new level.
+  advance_level(ch);
 }
 
 /* Gain maximum in various points */
@@ -331,7 +341,7 @@ bool load_char(const char *name, char_data *ch, bool logon)
 {
   init_char(ch);
   for (int i = SKILL_ATHLETICS; i < MAX_SKILLS; i++)
-    GET_SKILL(ch, i) = 0;
+    ch->char_specials.saved.skills[i][0] = 0;
   ch->char_specials.carry_weight = 0;
   ch->char_specials.carry_items = 0;
   GET_BALLISTIC(ch) = GET_TOTALBAL(ch) = GET_IMPACT(ch) = GET_TOTALIMP(ch) = 0;
@@ -342,6 +352,7 @@ bool load_char(const char *name, char_data *ch, bool logon)
   GET_LAST_TELL(ch) = NOBODY;
   MYSQL_RES *res;
   MYSQL_ROW row;
+  // TODO: Sanitize this. It shouldn't be exploitable to begin with, but better safe than sorry.
   sprintf(buf, "SELECT * FROM pfiles WHERE Name='%s';", name);
   mysql_wrapper(mysql, buf);
   if (!(res = mysql_use_result(mysql))) {
@@ -632,8 +643,8 @@ bool load_char(const char *name, char_data *ch, bool logon)
           obj->restring = str_dup(row[3]);
         if (*row[4])
           obj->photo = str_dup(row[4]);
-        for (int x = 0, y = 5; x < NUM_VALUES; x++, y++)
-          GET_OBJ_VAL(obj, x) = atoi(row[y]);
+        for (int x = 0; x < NUM_VALUES; x++)
+          GET_OBJ_VAL(obj, x) = atoi(row[x + 5]);
         if (GET_OBJ_VAL(obj, 0) == CYB_PHONE && GET_OBJ_VAL(obj, 7))
           add_phone_to_list(obj);
         else if (GET_OBJ_VAL(obj, 2) == 4 && GET_OBJ_VAL(obj, 7))
@@ -1860,7 +1871,9 @@ void DeleteChar(long idx)
   MYSQL_ROW row;
   if ((row = mysql_fetch_row(res))) {
     mysql_free_result(res);
-    sprintf(buf, "INSERT INTO pgroup_logs (idnum, message) VALUES (%ld, \"%s has left the group. (Reason: deletion)\")", atol(row[0]), get_player_name(idx));
+    char *cname = get_player_name(idx);
+    sprintf(buf, "INSERT INTO pgroup_logs (idnum, message) VALUES (%ld, \"%s has left the group. (Reason: deletion)\")", atol(row[0]), cname);
+    delete [] cname;
     mysql_wrapper(mysql, buf);
     sprintf(buf, "DELETE FROM pfiles_playergroups WHERE idnum=%ld", idx);
     mysql_wrapper(mysql, buf);

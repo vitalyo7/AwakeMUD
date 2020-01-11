@@ -48,107 +48,122 @@ extern int ELEVATOR_SHAFT_FALL_RATING;
 // static const int NUM_SEATTLE_STATIONS = 6;
 static const int NUM_SEATAC_STATIONS = 6;
 
-static struct dest_data destinations[] =
+struct dest_data taxi_destinations[] =
   {
-    { "tacoma", "Tacoma", 2000 },
-    { "knight", "Knight Center", 1519 },
-    { "afterlife", "The Afterlife", 2072 },
-    { "chinatown", "ChinaTown", 2527 },
-    { "evergreen", "Evergreen Complex", 2201 },
-    { "twe", "Tacoma Weapons Emporium", 2514 },
-    { "nybbles", "Nybbles and Bytes", 2057 },
-    { "biohyde", "Biohyde Complex", 4201 },
-    { "puyallup", "Central Puyallup", 2457 },
-    { "park", "Seattle State Park", 4000 },
-    { "seattle", "Seattle", 32679 },
-    { "cinema", "Le Cinema Vieux", 32588 },
-    { "vieux", "Le Cinema Vieux", 32588 },
-    { "charne", "La Charne", 30548 },
-    { "tarislar", "Tarislar", 4965 },
-    { "wyvern", "The Blue Wyvern", 4909 },
-    { "redmond", "Redmond", 14310 },
-    { "reaper", "The Reaper", 32517 },
-    { "platinum", "Platinum Club", 32685 },
-    { "penumbra", "Club Penumbra", 32587 },
-    { "big", "The Big Rhino", 32635 },
-    { "epicenter", "The Epicenter", 2418 },
-    { "yoshi", "Yoshi's Sushi Bar", 32751 },
-    { "airport", "Seattle-Tacoma Airport", 19410 },
-    { "aztech",  "Aztechnology Pyramid", 30539 },
-    { "garage", "Seattle Parking Garage", 32720 },
-    { "formal", "Seattle Formal Wear", 32746 },
-    { "sda", "The SDA Plaza", 30610 },
-    { "dante", "Dante's Inferno", 32661 },
-    { "quinns", "Quinn's", 32521 },
-    { "shintaru", "Shintaru", 32513 },
-    { "docks", "Seattle Dockyards", 32500 },
-    { "modern", "Modern Magik", 30514 },
-    { "methodist", "Seattle First Methodist", 30565 },
-    { "sculleys", "Sculleys", 30591 },
-    { "council", "Council Island", 9149 },
-    { "moonlight", "Moonlight Mall", 14373 },
-    { "library", "Seattle Public Library", 30600 },
-    { "kristins", "Kristin's", 30578 },
-    { "mitsuhama", "Mitsuhama Towers", 32722 },
-    { "chiba", "Little Chiba", 32686 },
-    { "stop", "The Stop Gap", 32708 },
-    { "apartment", "Redmond Apartment Block", 14337 },
-    { "humana", "Humana Hospital", 2536 },
-    { "hospital", "Council Island Hospital", 9161 },
-    { "coffin", "Tacoma Coffin Hotel", 2045 },
-    { "diver", "Easy Diver Coffin Hotel", 32644 },
-    { "action", "Action Computers", 32650 },
-    { "auburn", "Auburn", 29011 },
-    { "hellhound", "Hellhound Bus Stop",  32501 },
-    { "lysleul", "Lysleul Plaza", 30551 },
-    { "microdeck", "Auburn Microdeck Outlet", 29010 },
-    { "novatech", "Novatech Seattle", 32541 },
-    { "syberspace", "SyberSpace", 30612 },
-    { "pooks", "Pook's Place", 1530 },
-    { "errant", "KE Training Facility", 30127 },
-    { "italiano", "The Italiano", 30149 },
-    { "bank", "UCASBank", 30524 },
-    { "matchsticks", "Matchsticks", 30579 },
-    { "homewood", "Homewood Suites", 30512 },
-    { "mall", "Tacoma Mall", 2093 },
-    { "racespec", "Racespec Performance", 30573 },
-    { "smiths", "Smith's Pub", 32566 },
-    { "marksman", "Marksman Indoor Firing Range", 32682 },
-    { "sapphire", "The Star Sapphire", 70301 }, 
-    { "everett", "Everett", 39263 },
-    { "beacon", "Beacon Mall Everett", 39253 },
-    { "touristville", "Touristville", 25313 },
-    { "skeleton", "The Skeleton", 25308 },
-    { "\n", "", 0 } // this MUST be last
+    { "tacoma", "Tacoma", 2000, TAXI_DEST_TYPE_AREA_OF_TOWN, TRUE },
+    // { "knight", "Knight Center", 1519 },
+    // { "afterlife", "The Afterlife", 2072 },
+    // { "chinatown", "ChinaTown", 2527 },
+    // { "evergreen", "Evergreen Complex", 2201 },
+    // { "twe", "Tacoma Weapons Emporium", 2514 },
+    { "nybbles", "Nybbles and Bytes", 2057, TAXI_DEST_TYPE_SHOPPING, TRUE },
+    // { "biohyde", "Biohyde Complex", 4201 },
+    // { "puyallup", "Central Puyallup", 2457 },
+    // { "park", "Seattle State Park", 4000 },
+    { "seattle", "Seattle", 32679, TAXI_DEST_TYPE_AREA_OF_TOWN, TRUE },
+    // { "cinema", "Le Cinema Vieux", 32588 },
+    // { "vieux", "Le Cinema Vieux", 32588 },
+    // { "charne", "La Charne", 30548 },
+    // { "tarislar", "Tarislar", 4965 },
+    // { "wyvern", "The Blue Wyvern", 4909 },
+    // { "redmond", "Redmond", 14310 },
+    // { "reaper", "The Reaper", 32517 },
+    // { "platinum", "Platinum Club", 32685 },
+    // { "penumbra", "Club Penumbra", 32587 },
+    // { "big", "The Big Rhino", 32635 },
+    // { "epicenter", "The Epicenter", 2418 },
+    // { "yoshi", "Yoshi's Sushi Bar", 32751 },
+    // { "airport", "Seattle-Tacoma Airport", 19410 },
+    // { "aztech",  "Aztechnology Pyramid", 30539 },
+    // { "garage", "Seattle Parking Garage", 32720 },
+    // { "formal", "Seattle Formal Wear", 32746 },
+    // { "sda", "The SDA Plaza", 30610 },
+    { "dante", "Dante's Inferno", 32661, TAXI_DEST_TYPE_RESTAURANTS_AND_NIGHTCLUBS, TRUE },
+    // { "quinns", "Quinn's", 32521 },
+    // { "shintaru", "Shintaru", 32513 },
+    // { "docks", "Seattle Dockyards", 32500 },
+    // { "modern", "Modern Magik", 30514 },
+    // { "methodist", "Seattle First Methodist", 30565 },
+    // { "sculleys", "Sculleys", 30591 },
+    // { "council", "Council Island", 9149 },
+    // { "moonlight", "Moonlight Mall", 14373 },
+    // { "library", "Seattle Public Library", 30600 },
+    // { "kristins", "Kristin's", 30578 },
+    { "mitsuhama", "Mitsuhama Towers", 32722, TAXI_DEST_TYPE_CORPORATE_PARK, TRUE },
+    { "chiba", "Little Chiba", 32686, TAXI_DEST_TYPE_SHOPPING, TRUE },
+    // { "stop", "The Stop Gap", 32708 },
+    // { "apartment", "Redmond Apartment Block", 14337 },
+    // { "humana", "Humana Hospital", 2536 },
+    // { "hospital", "Council Island Hospital", 9161 },
+    // { "coffin", "Tacoma Coffin Hotel", 2045 },
+    // { "diver", "Easy Diver Coffin Hotel", 32644 },
+    { "action", "Action Computers", 32650, TAXI_DEST_TYPE_SHOPPING, TRUE },
+    // { "auburn", "Auburn", 29011 },
+    { "hellhound", "Hellhound Bus Stop",  32501, TAXI_DEST_TYPE_TRANSPORTATION, TRUE },
+    // { "lysleul", "Lysleul Plaza", 30551 },
+    // { "microdeck", "Auburn Microdeck Outlet", 29010 },
+    { "novatech", "Novatech Seattle", 32541, TAXI_DEST_TYPE_CORPORATE_PARK, TRUE },
+    // { "syberspace", "SyberSpace", 30612 },
+    // { "pooks", "Pook's Place", 1530 },
+    // { "errant", "KE Training Facility", 30127 },
+    // { "italiano", "The Italiano", 30149 },
+    // { "bank", "UCASBank", 30524 },
+    // { "matchsticks", "Matchsticks", 30579 },
+    // { "homewood", "Homewood Suites", 30512 },
+    { "mall", "Tacoma Mall", 2093, TAXI_DEST_TYPE_SHOPPING, TRUE },
+    // { "racespec", "Racespec Performance", 30573 },
+    // { "smiths", "Smith's Pub", 32566 },
+    // { "marksman", "Marksman Indoor Firing Range", 32682 },
+    { "sapphire", "The Star Sapphire", 70301, TAXI_DEST_TYPE_ACCOMMODATIONS, TRUE },
+    // { "everett", "Everett", 39263 },
+    // { "beacon", "Beacon Mall Everett", 39253 },
+    // { "touristville", "Touristville", 25313 },
+    // { "skeleton", "The Skeleton", 25308 },
+    { "junkyard",  "The Tacoma Junkyard", 2070, TAXI_DEST_TYPE_AREA_OF_TOWN, TRUE },
+#ifdef USE_PRIVATE_CE_WORLD
+    { "planetary", "Planetary Corporation", 72503, TAXI_DEST_TYPE_CORPORATE_PARK, TRUE },
+#endif
+    { "\n", "", 0, 0, 0 } // this MUST be last
   };
 
-static struct dest_data port_destinations[] =
+struct dest_data port_destinations[] =
   {
-    { "hellhound", "Hellhound Bus Station", 14624 },
-    { "postal", "Royal Postal Station", 14629 },
-    { "trans-oregon", "Trans-Oregon Trucking", 14604 },
-    { "thompson", "Thompson Autogroup",  14602},
-    { "hard", "Hard Times", 14608 },
-    { "bank", "TT-Bank", 14610 },
-    { "sixth", "Sixth Street Parking", 14680 },
-    { "satyricon", "The Satyricon", 14611 },
-    { "rocco", "Rocco's Pizza", 14730 },
-    { "annabel", "Annabel's Antiquities", 2710 },
-    { "square", "O'Bryant Square", 2708 },
-    { "parking", "Portland City Parking", 2703 },
-    { "mary", "Mary's Bar", 14712 },
-    { "tower", "TTBank Tower", 14743 },
-    { "city", "City Center Parking", 14751 },
-    { "habitat", "Telestrian Habitat", 18800 },
-    { "hospital", "Royal Hospital", 14707 },
-    { "toadstool", "The Toadstool", 14671 },
-    { "powells", "Powell's Technical Books", 14724 },
-    { "powell's", "Powell's Technical Books", 14724 },
-    { "davis", "Davis Street Offices", 14667 },
-    { "max", "Downtown MAX Station", 20800 },
-    { "\n", "", 0 } // this MUST be last
+    // { "hellhound", "Hellhound Bus Station", 14624 },
+    // { "postal", "Royal Postal Station", 14629 },
+    // { "trans-oregon", "Trans-Oregon Trucking", 14604 },
+    // { "thompson", "Thompson Autogroup",  14602},
+    // { "hard", "Hard Times", 14608 },
+    // { "bank", "TT-Bank", 14610 },
+    // { "sixth", "Sixth Street Parking", 14680 },
+    // { "satyricon", "The Satyricon", 14611 },
+    // { "rocco", "Rocco's Pizza", 14730 },
+    // { "annabel", "Annabel's Antiquities", 2710 },
+    // { "square", "O'Bryant Square", 2708 },
+    // { "parking", "Portland City Parking", 2703 },
+    // { "mary", "Mary's Bar", 14712 },
+    // { "tower", "TTBank Tower", 14743 },
+    // { "city", "City Center Parking", 14751 },
+    // { "habitat", "Telestrian Habitat", 18800 },
+    // { "hospital", "Royal Hospital", 14707 },
+    // { "toadstool", "The Toadstool", 14671 },
+    // { "powells", "Powell's Technical Books", 14724 },
+    // { "powell's", "Powell's Technical Books", 14724 },
+    // { "davis", "Davis Street Offices", 14667 },
+    // { "max", "Downtown MAX Station", 20800 },
+    { "\n", "", 0, 0, 0 } // this MUST be last
  
   };
+
+struct taxi_dest_type taxi_dest_type_info[] = {
+  { "^yAreas of Town", "^Y" },
+  { "^cCorporate Parks", "^C" },
+  { "^gTourist Attractions", "^G" },
+  { "^rTransportation", "^R" },
+  { "^mRestaurants and Nightclubs", "^M" },
+  { "^bShopping", "^B" },
+  { "^gAccommodation", "^G" },
+  { "^rHospitals", "^R" }
+};
 
 struct transport_type
 {
@@ -189,12 +204,97 @@ static int process_elevator(struct room_data *room,
 // Taxi
 // ____________________________________________________________________________
 
+// Taxi sign: If you look at it, it prints a dynamic description instead of the hardcoded one.
+SPECIAL(taxi_sign) {
+  struct obj_data *obj = (struct obj_data *) me;
+  
+  struct obj_data *tmp_object = NULL;
+  struct char_data *tmp_char = NULL;
+  
+  struct dest_data *dest_data_list = NULL;
+  
+  // No argument given, no character available, no problem. Skip it.
+  if (!*argument || !ch)
+    return FALSE;
+  
+  // You in a vehicle? I don't know how you got this sign, but skip it.
+  if (ch->in_veh)
+    return FALSE;
+  
+  // If it's not a command that would reveal this sign's data, skip it.
+  if (!(CMD_IS("look") || CMD_IS("examine") || CMD_IS("read")))
+    return FALSE;
+  
+  // Search the room and find something that matches me.
+  generic_find(argument, FIND_OBJ_ROOM, ch, &tmp_char, &tmp_object);
+  
+  // Senpai didn't notice me? Skip it, he's not worth it.
+  if (!tmp_object || tmp_object != obj)
+    return FALSE;
+  
+  // Select our destination list based on our vnum.
+  switch (GET_OBJ_VNUM(obj)) {
+    case OBJ_SEATTLE_TAXI_SIGN:
+      dest_data_list = taxi_destinations;
+      break;
+    case OBJ_PORTLAND_TAXI_SIGN:
+      dest_data_list = port_destinations;
+      break;
+    default:
+      sprintf(buf, "Warning: taxi_sign spec given to object %s (%ld) that had no matching definition in transport.cpp!",
+              GET_OBJ_NAME(obj), GET_OBJ_VNUM(obj));
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+      return FALSE;
+  }
+  
+  // Set up our default string.
+  strcpy(buf, "The keyword for each location is listed after the location name.  Say the keyword to the driver, and for a small fee, he will drive you to your destination.\r\n--------------------------------------------\r\n");
+  
+  bool is_first_printed_dest_title = TRUE;
+  
+  // Print that sweet, sweet destination-flavored goodness.
+  for (unsigned int taxi_dest_type = 0; taxi_dest_type < NUM_TAXI_DEST_TYPES; taxi_dest_type++) {
+    // Scan the list once to see if we have any of this dest type in the system.
+    bool has_this_dest_type = FALSE;
+    for (int dest_index = 0; *dest_data_list[dest_index].keyword != '\n'; dest_index++) {
+      if (dest_data_list[dest_index].enabled && dest_data_list[dest_index].type == taxi_dest_type) {
+        has_this_dest_type = TRUE;
+        break;
+      }
+    }
+    
+    // If we don't have anything from this dest type, continue.
+    if (!has_this_dest_type)
+      continue;
+    
+    // We have something! Print the dest type's title to make the list ~~fancy~~. Extra carriage return before if we're not the first.
+    sprintf(ENDOF(buf), "%s%s^n\r\n", is_first_printed_dest_title ? "" : "\r\n", taxi_dest_type_info[taxi_dest_type].title_string);
+    is_first_printed_dest_title = FALSE;
+    
+    // Iterate through and populate the dest list with what we've got available.
+    for (unsigned int dest_index = 0; *dest_data_list[dest_index].keyword != '\n'; dest_index++) {
+      if (dest_data_list[dest_index].enabled && dest_data_list[dest_index].type == taxi_dest_type) {
+        sprintf(ENDOF(buf), "%-30s - %s%s^n\r\n",
+                dest_data_list[dest_index].str,
+                taxi_dest_type_info[taxi_dest_type].entry_color_string,
+                capitalize(dest_data_list[dest_index].keyword));
+      }
+    }
+  }
+  
+  // Finally, tack on a newline and send it all to the character!
+  strcat(buf, "\r\n");
+  send_to_char(buf, ch);
+  
+  return TRUE;
+}
+
 // ______________________________
 //
 // utility funcs
 // ______________________________
 
-void open_taxi_door(struct room_data *room, int dir, struct room_data *taxi)
+void open_taxi_door(struct room_data *room, int dir, struct room_data *taxi, sbyte rating=0)
 {
   room->dir_option[dir] = new room_direction_data;
   memset((char *) room->dir_option[dir], 0,
@@ -213,6 +313,9 @@ void open_taxi_door(struct room_data *room, int dir, struct room_data *taxi)
   taxi->dir_option[dir]->barrier = 8;
   taxi->dir_option[dir]->condition = 8;
   taxi->dir_option[dir]->material = 8;
+  
+  // Optionally set the taxi's room rating so it waits a few ticks before trying to drive off again.
+  taxi->rating = rating;
 }
 
 void close_taxi_door(struct room_data *room, int dir, struct room_data *taxi)
@@ -236,19 +339,26 @@ void close_taxi_door(struct room_data *room, int dir, struct room_data *taxi)
 
 void taxi_leaves(void)
 {
-  int i, j, found = 0;
+  bool taxi_cant_leave = FALSE;
   struct room_data *to = NULL;
   struct char_data *temp;
-  for (j = real_room(FIRST_CAB); j <= real_room(LAST_PORTCAB); j++) {
-    found = 0;
+  for (int j = real_room(FIRST_CAB); j <= real_room(LAST_PORTCAB); j++) {
+    // Skip taxis that are occupied or still have a rating cooldown.
+    taxi_cant_leave = FALSE;
     for (temp = world[j].people; temp; temp = temp->next_in_room)
       if (!(GET_MOB_SPEC(temp) && GET_MOB_SPEC(temp) == taxi)) {
-        found = 1;
+        taxi_cant_leave = TRUE;
         break;
       }
-    if (found)
+    // Decrement taxis with a wait-rating, then skip them.
+    if (world[j].rating > 0) {
+      world[j].rating--;
       continue;
-    for (i = NORTH; i < UP; i++)
+    }
+    if (taxi_cant_leave)
+      continue;
+    
+    for (int i = NORTH; i < UP; i++)
       if (world[j].dir_option[i]) {
         to = world[j].dir_option[i]->to_room;
         close_taxi_door(to, rev_dir[i], &world[j]);
@@ -276,11 +386,11 @@ void taxi_leaves(void)
 ACMD(do_hail)
 {
   struct char_data *temp;
-  int cab, dir, first, last;
+  int cab, first, last;
   bool found = FALSE, empty = FALSE, portland = FALSE;
   SPECIAL(taxi);
 
-  for (dir = NORTH; dir < UP; dir++)
+  for (int dir = NORTH; dir < UP; dir++)
     if (!ch->in_room->dir_option[dir])
       empty = TRUE;
 
@@ -325,6 +435,7 @@ ACMD(do_hail)
     case 392:
     case 707:
     case 253:
+    case 725:
       break;
     case 27:
     case 146:
@@ -340,7 +451,8 @@ ACMD(do_hail)
     }
   }
 
-  if (AFF_FLAGS(ch).AreAnySet(AFF_SPELLINVIS, AFF_INVISIBLE, AFF_SPELLIMPINVIS, AFF_IMP_INVIS, ENDBIT))  {
+  if (AFF_FLAGS(ch).AreAnySet(AFF_SPELLINVIS, AFF_INVISIBLE, AFF_SPELLIMPINVIS, AFF_IMP_INVIS, ENDBIT)
+      || GET_INVIS_LEV(ch) > 0)  {
     send_to_char("A cab almost stops, but guns it at the last second, splashing you...\n\r",ch);
     return;
   }
@@ -348,14 +460,15 @@ ACMD(do_hail)
   first = real_room(portland ? FIRST_PORTCAB : FIRST_CAB);
   last = real_room(portland ? LAST_PORTCAB : LAST_CAB);
 
-  for (int tries = 0; tries < 10; tries++) {
-    cab = number(first, last);
+  for (cab = first; cab <= last; cab++) {
+    // Skip in-use cabs.
     for (temp = world[cab].people; temp; temp = temp->next_in_room)
       if (!(GET_MOB_SPEC(temp) && GET_MOB_SPEC(temp) == taxi))
         break;
     if (!temp) {
       found = TRUE;
-      for (dir = NORTH; dir < UP; dir++)
+      // Skip cabs that are already open and waiting at the curb.
+      for (int dir = NORTH; dir < UP; dir++)
         if (world[cab].dir_option[dir])
           found = FALSE;
       if (found)
@@ -368,9 +481,9 @@ ACMD(do_hail)
     return;
   }
 
-  for (dir = number(NORTH, UP - 1);; dir = number(NORTH, UP - 1))
+  for (int dir = number(NORTH, UP - 1);; dir = number(NORTH, UP - 1))
     if (!ch->in_room->dir_option[dir]) {
-      open_taxi_door(ch->in_room, dir, &world[cab]);
+      open_taxi_door(ch->in_room, dir, &world[cab], 1);
       if (portland)
       sprintf(buf, "A nice looking red and white cab pulls up smoothly to the curb, "
               "and its door opens to the %s.", fulldirs[dir]);
@@ -395,29 +508,38 @@ SPECIAL(taxi)
 
   struct char_data *temp = NULL, *driver = (struct char_data *) me;
   struct room_data *temp_room = NULL;
-  int comm = CMD_TAXI_NONE, i = 0, j;
+  int comm = CMD_TAXI_NONE;
   char say[MAX_STRING_LENGTH];
   vnum_t dest = 0;
   bool portland = FALSE;
   
+  // Portland taxi has a special set of messages, directions, etc.
   if (GET_MOB_VNUM(driver) == 650)
     portland = TRUE;
+  
+  // Evaluate the taxi driver's reactions.
   if (!cmd) {
+    // Iterate through the cab's contents, looking for anyone that the driver recognizes.
     for (temp = driver->in_room->people; temp; temp = temp->next_in_room)
       if (temp != driver && memory(driver, temp))
         break;
+    
+    // If nobody was found, clear out the driver's memory structure and wait for a command.
     if (!temp) {
       GET_SPARE1(driver) = 0;
       GET_SPARE2(driver) = 0;
       GET_ACTIVE(driver) = ACT_AWAIT_CMD;
-    } else
-      switch (GET_ACTIVE(driver)) {
+      return FALSE;
+    }
+    
+    // Otherwise, process the incoming command.
+    switch (GET_ACTIVE(driver)) {
       case ACT_REPLY_DEST:
         if (portland)
           sprintf(say, "%s?  Sure, that will be %d nuyen.",
                   port_destinations[GET_SPARE2(driver)].str, (int)GET_SPARE1(driver));
         else sprintf(say, "%s?  Yeah, sure...it'll cost ya %d nuyen, whaddya say?",
-                  destinations[GET_SPARE2(driver)].str, (int)GET_SPARE1(driver));
+                  taxi_destinations[GET_SPARE2(driver)].str, (int)GET_SPARE1(driver));
         do_say(driver, say, 0, 0);
         if (GET_EXTRA(driver) == 1) {
           do_say(driver, "But seeing as you're new around here, I'll waive my usual fee, okay?", 0, 0);
@@ -449,7 +571,7 @@ SPECIAL(taxi)
           GET_SPARE1(driver)--;
         else {
           int x[] = { 0, 0, 0, 0, 0, 0, 0, 0 }, y = 0;
-          for (j = number(NORTH, NORTHWEST);; j = number(NORTH, NORTHWEST)) {
+          for (int j = number(NORTH, NORTHWEST);; j = number(NORTH, NORTHWEST)) {
             if (!x[j]) {
               x[j] = 1;
               y++;
@@ -478,10 +600,13 @@ SPECIAL(taxi)
           }
         }
         break;
-      }
+    }
+    
+    // Bail out after processing the command.
     return FALSE;
   }
 
+  // If someone's bailing out of the cab, forget them.
   if (!IS_NPC(ch) && memory(driver, ch) && (CMD_IS("north") ||
       CMD_IS("east") || CMD_IS("west") || CMD_IS("south") || CMD_IS("ne") ||
       CMD_IS("se") || CMD_IS("sw") || CMD_IS("nw") || CMD_IS("northeast") ||
@@ -490,7 +615,8 @@ SPECIAL(taxi)
     return FALSE;
   }
 
-  if (!CAN_SEE(driver, ch) || IS_NPC(ch) ||
+  // If you're an NPC, or if the driver's not listening in the first place-- bail.
+  if (IS_NPC(ch) ||
       (GET_ACTIVE(driver) != ACT_AWAIT_CMD &&
        GET_ACTIVE(driver) != ACT_AWAIT_YESNO))
     return FALSE;
@@ -504,24 +630,25 @@ SPECIAL(taxi)
     
     bool found = FALSE;
     if (GET_ACTIVE(driver) == ACT_AWAIT_CMD)
-      for (dest = 0; (portland ? *port_destinations[dest].keyword : *destinations[dest].keyword) != '\n'; dest++)
-        if ( str_str((const char *)argument, (portland ? port_destinations[dest].keyword : destinations[dest].keyword))) {
+      for (dest = 0; (portland ? *port_destinations[dest].keyword : *taxi_destinations[dest].keyword) != '\n'; dest++)
+        if ( str_str((const char *)argument, (portland ? port_destinations[dest].keyword : taxi_destinations[dest].keyword))) {
           comm = CMD_TAXI_DEST;
           found = TRUE;
           break;
         }
     if (!found) {
-      if (str_str(argument, "yes") || str_str(argument, "sure") ||
-          str_str(argument, "yea") || str_str(argument, "okay"))
+      if (str_str(argument, "yes") || str_str(argument, "sure") || str_str(argument, "alright") ||
+          str_str(argument, "yeah") || str_str(argument, "okay") || str_str(argument, "yup")) {
         comm = CMD_TAXI_YES;
-      else if (strstr(argument, "no"))
+      } else if (strstr(argument, "no") || str_str(argument, "nah")) {
         comm = CMD_TAXI_NO;
+      }
     }
     do_say(ch, argument, 0, 0);
-  } else if (CMD_IS("nod")) {
+  } else if (CMD_IS("nod") || CMD_IS("agree")) {
     comm = CMD_TAXI_YES;
     do_action(ch, argument, cmd, 0);
-  } else if (CMD_IS("shake") && !*argument) {
+  } else if ((CMD_IS("shake") || CMD_IS("disagree")) && !*argument) {
     comm = CMD_TAXI_NO;
     do_action(ch, argument, cmd, 0);
   } else
@@ -538,14 +665,14 @@ SPECIAL(taxi)
       }
     int dist = 0;
     while (temp_room) {
-      int x = find_first_step(real_room(temp_room->number), real_room((portland ? port_destinations[dest].vnum : destinations[dest].vnum)));
+      int x = find_first_step(real_room(temp_room->number), real_room((portland ? port_destinations[dest].vnum : taxi_destinations[dest].vnum)));
       if (x == -2)
         break;
       else if (x < 0) {
         temp_room = NULL;
         break;
       }
-      temp_room = world[i].dir_option[x]->to_room;
+      temp_room = temp_room->dir_option[x]->to_room;
       dist++;
     }
     if (!temp_room)
@@ -567,7 +694,7 @@ SPECIAL(taxi)
     if (!IS_SENATOR(ch))
       GET_NUYEN(ch) -= GET_SPARE1(driver);
     GET_SPARE1(driver) = (int)(GET_SPARE1(driver) / 50);
-    GET_SPARE2(driver) = portland ? port_destinations[GET_SPARE2(driver)].vnum : destinations[GET_SPARE2(driver)].vnum;
+    GET_SPARE2(driver) = portland ? port_destinations[GET_SPARE2(driver)].vnum : taxi_destinations[GET_SPARE2(driver)].vnum;
     GET_ACTIVE(driver) = ACT_DRIVING;
 
     for (int dir = NORTH; dir < UP; dir++)
@@ -960,6 +1087,20 @@ static int process_elevator(struct room_data *room,
         
         // Message the shaft.
         send_to_room("The elevator car shudders and begins to move.\r\n", &world[real_room(elevator[num].floor[room->rating].shaft_vnum)]);
+        
+        // Notify the next shaft room that they're about to get a car in the face.
+        sprintf(buf, "The shaft rumbles ominously as the elevator car %s you begins to accelerate towards you.\r\n",
+                elevator[num].dir == DOWN ? "above" : "below");
+        send_to_room(buf, &world[real_room(elevator[num].floor[room->rating + (elevator[num].dir == DOWN ? 1 : -1)].shaft_vnum)]);
+        
+        // Notify all other shaft rooms about the elevator starting to move.
+        for (int i = 0; i < elevator[num].num_floors; i++) {
+          if (i == room->rating || i == room->rating + (elevator[num].dir == DOWN ? 1 : -1))
+            continue;
+          
+          send_to_room("The shaft rumbles ominously as an elevator car begins to move.\r\n", &world[real_room(elevator[num].floor[i].shaft_vnum)]);
+        }
+        
         elevator[num].is_moving = TRUE;
         return TRUE;
       }
@@ -1071,6 +1212,13 @@ static int process_elevator(struct room_data *room,
       
       shaft->temporary_stored_exit[dir] = shaft->dir_option[dir];
       shaft->dir_option[dir] = NULL;
+      
+      if (elevator[num].time_left > 0) {
+        // Notify the next shaft room that they're about to get a car in the face.
+        sprintf(buf, "A light breeze brushes by as the elevator car %s you speeds towards you.\r\n",
+                elevator[num].dir == DOWN ? "above" : "below");
+        send_to_room(buf, &world[real_room(elevator[num].floor[room->rating + (elevator[num].dir == DOWN ? 1 : -1)].shaft_vnum)]);
+      }
     }
     
     // Arrive at the target floor.
@@ -1088,6 +1236,18 @@ static int process_elevator(struct room_data *room,
       send_to_room(buf, &world[real_room(room->number)]);
       open_elevator_doors(room, num, room->rating);
       elevator[num].is_moving = FALSE;
+      
+      // Notify this shaft room that the elevator has stopped.
+      send_to_room("The cable thrums with tension as the elevator comes to a graceful halt.\r\n",
+                   &world[real_room(elevator[num].floor[room->rating].shaft_vnum)]);
+      
+      // Notify all other shaft rooms that the elevator has stopped.
+      for (int i = 0; i < elevator[num].num_floors; i++) {
+        if (i == room->rating)
+          continue;
+        
+        send_to_room("The ominous rumblings from the shaft's guiderails fade.\r\n", &world[real_room(elevator[num].floor[i].shaft_vnum)]);
+      }
     } else if (elevator[num].dir > 0)
       elevator[num].dir--;
     else if (!elevator[num].dir) {

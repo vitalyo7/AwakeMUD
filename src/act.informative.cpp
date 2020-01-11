@@ -40,6 +40,8 @@ using namespace std;
 
 const char *CCHAR;
 
+extern bool DISPLAY_HELPFUL_STRINGS_FOR_MOB_FUNCS;
+
 /* extern variables */
 extern class objList ObjList;
 extern class helpList Help;
@@ -60,6 +62,8 @@ extern SPECIAL(metamagic_teacher);
 extern SPECIAL(adept_trainer);
 extern SPECIAL(spell_trainer);
 extern SPECIAL(johnson);
+extern SPECIAL(shop_keeper);
+extern SPECIAL(landlord_spec);
 
 extern bool trainable_attribute_is_maximized(struct char_data *ch, int attribute);
 
@@ -559,7 +563,10 @@ void look_at_char(struct char_data * i, struct char_data * ch)
   
   if (found)
   {
-    act("\r\n$n is using:", FALSE, i, 0, ch, TO_VICT);
+    if (ch == i)
+      send_to_char("\r\nYou are using:\r\n", ch);
+    else
+      act("\r\n$n is using:", FALSE, i, 0, ch, TO_VICT);
     for (j = 0; j < NUM_WEARS; j++)
       if (GET_EQ(i, j) && CAN_SEE_OBJ(ch, GET_EQ(i, j))) {
         if (GET_OBJ_TYPE(GET_EQ(i, j)) == ITEM_HOLSTER && GET_OBJ_VAL(GET_EQ(i, j), 0) == 2) {
@@ -719,30 +726,72 @@ void list_one_char(struct char_data * i, struct char_data * ch)
       strcat(buf, "The ghostly image of ");
     strcat(buf, i->player.physical_text.room_desc);
     
-    // TODO: Add a toggle for this system to be disabled.
-    if (mob_index[GET_MOB_RNUM(i)].func == trainer) {
-      sprintf(ENDOF(buf), "^y...%s looks willing to train you.^n\r\n", HSSH(i));
-    }
-    else if (mob_index[GET_MOB_RNUM(i)].func == teacher) {
-      sprintf(ENDOF(buf), "^y...%s looks willing to help you practice your skills.^n\r\n", HSSH(i));
-    }
-    else if (mob_index[GET_MOB_RNUM(i)].func == metamagic_teacher) {
-      // Mundanes can't see metamagic teachers' abilities.
-      if (GET_TRADITION(ch) != TRAD_MUNDANE)
-        sprintf(ENDOF(buf), "^y...%s looks willing to help you train in metamagic techniques.^n\r\n", HSSH(i));
-    }
-    else if (mob_index[GET_MOB_RNUM(i)].func == adept_trainer) {
-      // Mundanes can't see adept trainers' abilities.
-      if (GET_TRADITION(ch) == TRAD_ADEPT)
-        sprintf(ENDOF(buf), "^y...%s looks willing to help you train your powers.^n\r\n", HSSH(i));
-    }
-    else if (mob_index[GET_MOB_RNUM(i)].func == spell_trainer) {
-      // Mundanes can't see spell trainers' abilities.
-      if (GET_TRADITION(ch) != TRAD_MUNDANE && GET_TRADITION(ch) != TRAD_ADEPT)
-        sprintf(ENDOF(buf), "^y...%s looks willing to help you learn new spells.^n\r\n", HSSH(i));
-    }
-    else if (mob_index[GET_MOB_RNUM(i)].func == johnson) {
-      sprintf(ENDOF(buf), "^y...%s might have a job for you.^n\r\n", HSSH(i));
+    if (DISPLAY_HELPFUL_STRINGS_FOR_MOB_FUNCS) {
+      if (mob_index[GET_MOB_RNUM(i)].func) {
+        if (mob_index[GET_MOB_RNUM(i)].func == trainer) {
+          sprintf(ENDOF(buf), "^y...%s looks willing to train you.^n\r\n", HSSH(i));
+        }
+        if (mob_index[GET_MOB_RNUM(i)].func == teacher) {
+          sprintf(ENDOF(buf), "^y...%s looks willing to help you practice your skills.^n\r\n", HSSH(i));
+        }
+        if (mob_index[GET_MOB_RNUM(i)].func == metamagic_teacher) {
+          // Mundanes can't see metamagic teachers' abilities.
+          if (GET_TRADITION(ch) != TRAD_MUNDANE)
+            sprintf(ENDOF(buf), "^y...%s looks willing to help you train in metamagic techniques.^n\r\n", HSSH(i));
+        }
+        if (mob_index[GET_MOB_RNUM(i)].func == adept_trainer) {
+          // Adepts can't see adept trainers' abilities.
+          if (GET_TRADITION(ch) == TRAD_ADEPT)
+            sprintf(ENDOF(buf), "^y...%s looks willing to help you train your powers.^n\r\n", HSSH(i));
+        }
+        if (mob_index[GET_MOB_RNUM(i)].func == spell_trainer) {
+          // Mundanes and adepts can't see spell trainers' abilities.
+          if (GET_TRADITION(ch) != TRAD_MUNDANE && GET_TRADITION(ch) != TRAD_ADEPT)
+            sprintf(ENDOF(buf), "^y...%s looks willing to help you learn new spells.^n\r\n", HSSH(i));
+        }
+        if (mob_index[GET_MOB_RNUM(i)].func == johnson) {
+          sprintf(ENDOF(buf), "^y...%s might have a job for you.^n\r\n", HSSH(i));
+        }
+        if (mob_index[GET_MOB_RNUM(i)].func == shop_keeper) {
+          sprintf(ENDOF(buf), "^y...%s has a few things for sale.^n\r\n", HSSH(i));
+        }
+        if (mob_index[GET_MOB_RNUM(i)].func == landlord_spec) {
+          sprintf(ENDOF(buf), "^y...%s might have some rooms for lease.^n\r\n", HSSH(i));
+        }
+      }
+      
+      if (mob_index[GET_MOB_RNUM(i)].sfunc && mob_index[GET_MOB_RNUM(i)].sfunc != mob_index[GET_MOB_RNUM(i)].func) {
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == trainer) {
+          sprintf(ENDOF(buf), "^y...%s%s looks willing to train you.^n\r\n", HSSH(i), mob_index[GET_MOB_RNUM(i)].func ? " also" : "");
+        }
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == teacher) {
+          sprintf(ENDOF(buf), "^y...%s%s looks willing to help you practice your skills.^n\r\n", HSSH(i), mob_index[GET_MOB_RNUM(i)].func ? " also" : "");
+        }
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == metamagic_teacher) {
+          // Mundanes can't see metamagic teachers' abilities.
+          if (GET_TRADITION(ch) != TRAD_MUNDANE)
+            sprintf(ENDOF(buf), "^y...%s%s looks willing to help you train in metamagic techniques.^n\r\n", HSSH(i), mob_index[GET_MOB_RNUM(i)].func ? " also" : "");
+        }
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == adept_trainer) {
+          // Adepts can't see adept trainers' abilities.
+          if (GET_TRADITION(ch) == TRAD_ADEPT)
+            sprintf(ENDOF(buf), "^y...%s%s looks willing to help you train your powers.^n\r\n", HSSH(i), mob_index[GET_MOB_RNUM(i)].func ? " also" : "");
+        }
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == spell_trainer) {
+          // Mundanes and adepts can't see spell trainers' abilities.
+          if (GET_TRADITION(ch) != TRAD_MUNDANE && GET_TRADITION(ch) != TRAD_ADEPT)
+            sprintf(ENDOF(buf), "^y...%s%s looks willing to help you learn new spells.^n\r\n", HSSH(i), mob_index[GET_MOB_RNUM(i)].func ? " also" : "");
+        }
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == johnson) {
+          sprintf(ENDOF(buf), "^y...%s%s might have a job for you.^n\r\n", HSSH(i), mob_index[GET_MOB_RNUM(i)].func ? " also" : "");
+        }
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == shop_keeper) {
+          sprintf(ENDOF(buf), "^y...%s%s has a few things for sale.^n\r\n", HSSH(i), mob_index[GET_MOB_RNUM(i)].func ? " also" : "");
+        }
+        if (mob_index[GET_MOB_RNUM(i)].sfunc == landlord_spec) {
+          sprintf(ENDOF(buf), "^y...%s might have some rooms for lease.^n\r\n", HSSH(i));
+        }
+      }
     }
     
     send_to_char(buf, ch);
@@ -1148,7 +1197,6 @@ void look_at_room(struct char_data * ch, int ignore_brief)
     return;
   }
   
-  // Streetlight code
   if (ch->in_veh && (!ch->in_room || PLR_FLAGGED(ch, PLR_REMOTE))) {
     look_in_veh(ch);
     return;
@@ -1283,6 +1331,15 @@ void look_at_room(struct char_data * ch, int ignore_brief)
         }
       }
     }
+  }
+  
+  SPECIAL(car_dealer);
+  if (ch->in_room->func) {
+    if (ch->in_room->func == car_dealer) {
+      send_to_char("^y...There are vehicles for sale here.^n\r\n", ch);
+    }
+    
+    // TODO: Add any other relevant funcs with room displays here.
   }
   
   /* now list characters & objects */
@@ -1678,7 +1735,11 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
   bool has_pockets = FALSE, added_extra_carriage_return = FALSE, has_smartlink = FALSE;
   struct obj_data *access = NULL;
   
-  sprintf(buf, "^MOOC^n statistics for '^y%s^n':\r\n", ((j->text.name) ? j->text.name : "<None>"));
+  if (j->restring) {
+    sprintf(buf, "^MOOC^n statistics for '^y%s^n' (restrung from %s):\r\n", GET_OBJ_NAME(j), j->text.name);
+  } else {
+    sprintf(buf, "^MOOC^n statistics for '^y%s^n':\r\n", (GET_OBJ_NAME(j) ? GET_OBJ_NAME(j) : "<None>"));
+  }
   
   sprinttype(GET_OBJ_TYPE(j), item_types, buf1);
   sprintf(ENDOF(buf), "It is %s ^c%s^n that weighs ^c%.2f^n kilos. It is made of ^c%s^n with a durability of ^c%d^n.\r\n",
@@ -1713,6 +1774,7 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
       sprintf(ENDOF(buf), "and requires the ^c%s^n skill to use.", skills[GET_OBJ_VAL(j, 4)].name);
       break;
     case ITEM_WEAPON:
+      // Ranged weapons first.
       if (IS_GUN(GET_OBJ_VAL((j), 3))) {
         if (GET_OBJ_VAL(j, 5) > 0) {
           sprintf(ENDOF(buf), "It is a ^c%d-round %s^n that uses the ^c%s^n skill to fire. Its damage code is ^c%d%s%s^n.",
@@ -1722,6 +1784,11 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
           sprintf(ENDOF(buf), "It is %s ^c%s^n that uses the ^c%s^n skill to fire. Its damage code is ^c%d%s%s^n.",
                   AN(weapon_type[GET_OBJ_VAL(j, 3)]), weapon_type[GET_OBJ_VAL(j, 3)], skills[GET_OBJ_VAL(j, 4)].name,
                   GET_OBJ_VAL(j, 0), wound_arr[GET_OBJ_VAL(j, 1)], !IS_DAMTYPE_PHYSICAL(get_weapon_damage_type(j)) ? " (stun)" : "");
+        }
+        if (GET_WEAPON_INTEGRAL_RECOIL_COMP(j)) {
+          sprintf(ENDOF(buf), "\r\nIt has ^c%d^n point%s of integral recoil compensation.",
+                  GET_WEAPON_INTEGRAL_RECOIL_COMP(j),
+                  GET_WEAPON_INTEGRAL_RECOIL_COMP(j) > 1 ? "s" : "");
         }
         
         // Info about attachments, if any.
@@ -1784,7 +1851,7 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
                 break;
               case ACCESS_BAYONET:
                 if (mount_location != ACCESS_LOCATION_UNDER) {
-                  strcat(buf, "\r\n^RYour bipod has been mounted in the wrong location and is nonfunctional. Alert an imm.");
+                  strcat(buf, "\r\n^RYour bayonet has been mounted in the wrong location and is nonfunctional. Alert an imm.");
                 } else {
                   sprintf(ENDOF(buf), "\r\nA bayonet attached to the %s allows you to use the Pole Arms skill when defending from melee attacks.",
                           gun_accessory_locations[mount_location]);
@@ -1807,15 +1874,24 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
             }
           }
         }
-      } else {
-        if (GET_OBJ_VAL(j, 2) > 0) {
-          sprintf(ENDOF(buf), "It is a ^c%s^n that uses the ^c%s^n skill to attack with. Its damage code is ^c(STR+%d)%s%s^n.",
-                  weapon_type[GET_OBJ_VAL(j, 3)], skills[GET_OBJ_VAL(j, 4)].name, GET_OBJ_VAL(j, 2), wound_arr[GET_OBJ_VAL(j, 1)],
+      }
+      // Melee weapons.
+      else {
+        if (GET_OBJ_VAL(j, 2) != 0) {
+          sprintf(ENDOF(buf), "It is a ^c%s^n that uses the ^c%s^n skill to attack with. Its damage code is ^c(STR%s%d)%s%s^n.",
+                  weapon_type[GET_OBJ_VAL(j, 3)],
+                  skills[GET_OBJ_VAL(j, 4)].name,
+                  GET_OBJ_VAL(j, 2) < 0 ? "" : "+",
+                  GET_OBJ_VAL(j, 2),
+                  wound_arr[GET_OBJ_VAL(j, 1)],
                   !IS_DAMTYPE_PHYSICAL(get_weapon_damage_type(j)) ? " (stun)" : "");
         } else {
           sprintf(ENDOF(buf), "It is a ^c%s^n that uses the ^c%s^n skill to attack with. Its damage code is ^c(STR)%s%s^n.",
                   weapon_type[GET_OBJ_VAL(j, 3)], skills[GET_OBJ_VAL(j, 4)].name, wound_arr[GET_OBJ_VAL(j, 1)],
                   !IS_DAMTYPE_PHYSICAL(get_weapon_damage_type(j)) ? " (stun)" : "");
+        }
+        if (GET_WEAPON_REACH(j)) {
+          sprintf(ENDOF(buf), "\r\nIt grants %d meters of reach when wielded.", GET_WEAPON_REACH(j));
         }
       }
       break;
@@ -2079,6 +2155,10 @@ void do_probe_object(struct char_data * ch, struct obj_data * j) {
   if (found) {
     strcat(buf, buf1);
     strcat(buf, "^n\r\n");
+  }
+  
+  if (IS_OBJ_STAT(j, ITEM_NERPS)) {
+    strcat(buf, "^YIt has been flagged NERPS, indicating it has no special coded effects.^n\r\n");
   }
   
   if (j->source_info) {
@@ -3161,7 +3241,7 @@ ACMD(do_index)
   mysql_free_result(res);
 }
 
-void display_help(char *help, const char *arg) {
+void display_help(char *help, const char *arg, struct char_data *ch) {
   char query[MAX_STRING_LENGTH];
   MYSQL_RES *res;
   MYSQL_ROW row;
@@ -3175,7 +3255,8 @@ void display_help(char *help, const char *arg) {
   if (mysql_wrapper(mysql, query)) {
     // We got a SQL error-- bail.
     sprintf(help, "The help system is temporarily unavailable.\r\n");
-    mudlog("WARNING: Failed to return help topic. See server log for MYSQL error.", NULL, LOG_SYSLOG, TRUE);
+    sprintf(buf3, "WARNING: Failed to return help topic about %s. See server log for MYSQL error.", arg);
+    mudlog(buf3, ch, LOG_SYSLOG, TRUE);
     return;
   } else {
     res = mysql_store_result(mysql);
@@ -3203,29 +3284,51 @@ void display_help(char *help, const char *arg) {
   // If we have no rows, fail.
   if (x < 1) {
     sprintf(help, "No such help file exists.\r\n");
+    sprintf(buf3, "Failed helpfile search: %s.", arg);
+    mudlog(buf3, ch, LOG_HELPLOG, TRUE);
+    mysql_free_result(res);
+    return;
   }
   
   // If we have too many rows, try to refine the search to just files starting with the search string.
   else if (x > 5) {
+    // Prepare a just-in-case response with the topics that were found in the overbroad search.
+    sprintf(help, "%d articles returned, please narrow your search. The topics found were:\r\n", x);
+    while ((row = mysql_fetch_row(res))) {
+      sprintf(ENDOF(help), "^W%s^n\r\n", row[0]);
+    }
     mysql_free_result(res);
+    
+    // Try a lookup with just files that have the search string at the start of their title.
     sprintf(query, "SELECT * FROM help_topic WHERE name LIKE '%s%%' ORDER BY name ASC", buf);
     if (mysql_wrapper(mysql, query)) {
-      sprintf(help, "%d articles returned, please narrow your search.aa\r\n", x);
+      // We hit an error with this followup search, so we just return our pre-prepared string with the search that succeeded.
+      sprintf(buf3, "Overbroad helpfile search combined with follow-up lookup failure (%d articles): %s.", x, arg);
+      mudlog(buf3, ch, LOG_HELPLOG, TRUE);
       return;
     }
     res = mysql_store_result(mysql);
     row = mysql_fetch_row(res);
-    int y = mysql_num_rows(res);
-    if (y == 1)
-      sprintf(ENDOF(help), "^W%s^n\r\n\r\n%s\r\n", row[0], row[1]);
-    else sprintf(help, "%d articles returned, please narrow your search.\r\n", x);
-  } else {
+    if (mysql_num_rows(res) == 1) {
+      // We found a single candidate row-- send that back.
+      sprintf(help, "^W%s^n\r\n\r\n%s\r\n", row[0], row[1]);
+    } else {
+      // We didn't find any candidate rows, or we found too many. They'll get the pre-prepared string, and we'll log this one.
+      sprintf(buf3, "Overbroad helpfile search (%d articles): %s.", x, arg);
+      mudlog(buf3, ch, LOG_HELPLOG, TRUE);
+    }
+    mysql_free_result(res);
+    return;
+  }
+  
+  // We found 1-5 results. Chunk 'em together and return them.
+  else {
     while ((row = mysql_fetch_row(res))) {
       sprintf(ENDOF(help), "^W%s^n\r\n\r\n%s\r\n", row[0], row[1]);
     }
+    mysql_free_result(res);
     return;
   }
-  mysql_free_result(res);
 }
 
 ACMD(do_help)
@@ -3239,7 +3342,7 @@ ACMD(do_help)
     return;
   }
   
-  display_help(buf, argument);
+  display_help(buf, argument, ch);
   send_to_char(buf, ch);
 }
 
@@ -3829,14 +3932,14 @@ void perform_immort_where(struct char_data * ch, char *arg)
         if (i && CAN_SEE(ch, i) && (i->in_room || i->in_veh)) {
           if (d->original)
             if (d->character->in_veh)
-              sprintf(buf + strlen(buf), "%-20s - [%5ld] %s (switched as %s) (in %s)\r\n",
+              sprintf(buf + strlen(buf), "%-20s - [%5ld] %s^n (switched as %s) (in %s)\r\n",
                       GET_CHAR_NAME(i),
                       GET_ROOM_VNUM(get_ch_in_room(d->character)),
                       GET_ROOM_NAME(get_ch_in_room(d->character)),
                       GET_NAME(d->character),
                       GET_VEH_NAME(d->character->in_veh));
             else
-              sprintf(buf + strlen(buf), "%-20s - [%5ld] %s (in %s)\r\n",
+              sprintf(buf + strlen(buf), "%-20s - [%5ld] %s^n (in %s)\r\n",
                       GET_CHAR_NAME(i),
                       GET_ROOM_VNUM(get_ch_in_room(d->character)),
                       GET_ROOM_NAME(get_ch_in_room(d->character)),
@@ -3844,13 +3947,13 @@ void perform_immort_where(struct char_data * ch, char *arg)
           
             else
               if (i->in_veh)
-                sprintf(buf + strlen(buf), "%-20s - [%5ld] %s (in %s)\r\n",
+                sprintf(buf + strlen(buf), "%-20s - [%5ld] %s^n (in %s)\r\n",
                         GET_CHAR_NAME(i),
                         GET_ROOM_VNUM(get_ch_in_room(i)),
                         GET_ROOM_NAME(get_ch_in_room(i)),
                         GET_VEH_NAME(i->in_veh));
               else
-                sprintf(buf + strlen(buf), "%-20s - [%5ld] %s\r\n",
+                sprintf(buf + strlen(buf), "%-20s - [%5ld] %s^n\r\n",
                         GET_CHAR_NAME(i),
                         GET_ROOM_VNUM(get_ch_in_room(i)),
                         GET_ROOM_NAME(get_ch_in_room(i)));
@@ -3864,12 +3967,12 @@ void perform_immort_where(struct char_data * ch, char *arg)
       if (CAN_SEE(ch, i) && (i->in_room || i->in_veh) &&
           isname(arg, GET_KEYWORDS(i))) {
         found = 1;
-        sprintf(buf + strlen(buf), "M%3d. %-25s - [%5ld] %s", ++num,
+        sprintf(buf + strlen(buf), "M%3d. %-25s - [%5ld] %s^n", ++num,
                 GET_NAME(i),
                 GET_ROOM_VNUM(get_ch_in_room(i)),
                 GET_ROOM_NAME(get_ch_in_room(i)));
         if (i->in_veh) {
-          sprintf(ENDOF(buf), " (in %s)\r\n", GET_VEH_NAME(i->in_veh));
+          sprintf(ENDOF(buf), " (in %s^n)\r\n", GET_VEH_NAME(i->in_veh));
         } else {
           strcat(buf, "\r\n");
         }

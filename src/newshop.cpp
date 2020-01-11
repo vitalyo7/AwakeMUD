@@ -231,7 +231,7 @@ bool shop_receive(struct char_data *ch, struct char_data *keeper, char *arg, int
           return FALSE;
         }
       }
-      int esscost = GET_OBJ_VAL(obj, 4);
+      int esscost = GET_CYBERWARE_ESSENCE_COST(obj);
       if (GET_TOTEM(ch) == TOTEM_EAGLE)
         esscost *= 2;
       if (ch->real_abils.esshole < esscost) {
@@ -378,8 +378,16 @@ bool shop_receive(struct char_data *ch, struct char_data *keeper, char *arg, int
       do_say(keeper, buf, cmd_say, SCMD_SAYTO);
     }
   }
-  sprintf(arg, shop_table[shop_nr].buy, bought * price);
-  sprintf(buf, "%s %s", GET_CHAR_NAME(ch), arg);
+  // Write the nuyen cost to buf3 and the current buy-string to arg.
+  char price_buf[100];
+  sprintf(price_buf, "%d", bought * price);
+  strcpy(arg, shop_table[shop_nr].buy);
+  
+  // Use our new replace_substring() function to swap out all %d's in arg with the nuyen string.
+  replace_substring(arg, buf3, "%d", price_buf);
+  
+  // Compose the sayto string for the keeper.
+  sprintf(buf, "%s %s", GET_CHAR_NAME(ch), buf3);
   do_say(keeper, buf, cmd_say, SCMD_SAYTO);
   if (bought > 1)
     sprintf(ENDOF(buf2), " (x%d)\r\n", bought);
@@ -453,7 +461,7 @@ void shop_buy(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t 
     price += bprice * GET_AVAIL_OFFSET(ch);
   if (sell->type == SELL_AVAIL && GET_OBJ_AVAILTN(obj) > 0)
   {
-    for (int q = 0; q <= 4; q++)
+    for (int q = 0; q <= SHOP_LAST_IDNUM_LIST_SIZE; q++)
       if (sell->lastidnum[q] == GET_IDNUM(ch)) {
         sprintf(buf, "%s Sorry, I couldn't get that in for you.", GET_CHAR_NAME(ch));
         do_say(keeper, buf, cmd_say, SCMD_SAYTO);
@@ -484,7 +492,7 @@ void shop_buy(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t 
     if (success < 1 || buynum > 50) {
       sprintf(buf, "%s I can't get ahold of that one for a while.", GET_CHAR_NAME(ch));
       do_say(keeper, buf, cmd_say, SCMD_SAYTO);
-      for (int q = 4; q >= 1; q--)
+      for (int q = SHOP_LAST_IDNUM_LIST_SIZE; q >= 1; q--)
         sell->lastidnum[q] = sell->lastidnum[q-1];
       sell->lastidnum[0] = GET_IDNUM(ch);
     } else {
@@ -605,8 +613,17 @@ void shop_sell(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
     GET_OBJ_VAL(cred, 0) += sellprice;
   sprintf(buf3, "%s sold %s at %s (%ld) for %d.", GET_CHAR_NAME(ch), GET_OBJ_NAME(obj), GET_CHAR_NAME(keeper), shop_table[shop_nr].vnum, sellprice);
   mudlog(buf3, ch, LOG_GRIDLOG, TRUE);
-  sprintf(arg, shop_table[shop_nr].sell, sellprice);
-  sprintf(ENDOF(buf), " %s", arg);
+  
+  // Write the nuyen cost to buf3 and the current buy-string to arg.
+  char price_buf[100];
+  sprintf(price_buf, "%d", sellprice);
+  strcpy(arg, shop_table[shop_nr].sell);
+  
+  // Use our new replace_substring() function to swap out all %d's in arg with the nuyen string.
+  replace_substring(arg, buf3, "%d", price_buf);
+  
+  // Compose the sayto string for the keeper.
+  sprintf(buf, "%s %s", GET_CHAR_NAME(ch), buf3);
   do_say(keeper, buf, cmd_say, SCMD_SAYTO);
   for (;sell; sell = sell->next)
     if (sell->vnum == GET_OBJ_VNUM(obj))
@@ -657,8 +674,15 @@ void shop_list(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
       // Read the object; however, if it's an invalid vnum or has no sale cost, skip it.
       if (!(obj = read_object(sell->vnum, VIRTUAL)) || GET_OBJ_COST(obj) < 1) {
         i--;
-        if (obj)
+        if (obj) {
+          sprintf(buf2, "Shop %ld ('%s'): Removing %s (%ld) from sale due to cost of %d.",
+                  shop_nr, GET_NAME(keeper), GET_OBJ_NAME(obj), GET_OBJ_VNUM(obj), GET_OBJ_COST(obj));
+          mudlog(buf2, ch, LOG_SYSLOG, TRUE);
           extract_obj(obj);
+        } else {
+          sprintf(buf2, "Shop %ld ('%s'): Removing nonexistant item (%ld) from sale.", shop_nr, GET_NAME(keeper), GET_OBJ_VNUM(obj));
+          mudlog(buf2, ch, LOG_SYSLOG, TRUE);
+        }
         continue;
       }
       
@@ -690,6 +714,9 @@ void shop_list(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
         }
       }
       
+      if (IS_OBJ_STAT(obj, ITEM_NERPS))
+        strcat(buf, ". OOC note: It has no coded effect");
+      
       strcat(buf, ".\r\n");
       
       // Clean up so we don't leak the object.
@@ -708,8 +735,14 @@ void shop_list(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
       obj = read_object(sell->vnum, VIRTUAL);
       if (!obj || GET_OBJ_COST(obj) < 1) {
         i--;
-        if (obj)
+        if (obj) {
+          sprintf(buf2, "Shop %ld ('%s'): Removing %s from sale due to cost of %d.", shop_nr, GET_NAME(keeper), GET_OBJ_NAME(obj), GET_OBJ_COST(obj));
+          mudlog(buf2, ch, LOG_SYSLOG, TRUE);
           extract_obj(obj);
+        } else {
+          sprintf(buf2, "Shop %ld ('%s'): Removing nonexistant item from sale.", shop_nr, GET_NAME(keeper));
+          mudlog(buf2, ch, LOG_SYSLOG, TRUE);
+        }
         continue;
       }
       sprintf(ENDOF(buf), " %2d)  ", i);
@@ -729,9 +762,16 @@ void shop_list(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
       if (GET_OBJ_VAL(obj, 1) > 0)
         sprintf(buf2, "%d", GET_OBJ_VAL(obj, 1));
       else strcpy(buf2, "-");
-      sprintf(ENDOF(buf), "%-33s^n %-6s%2s   %0.2f%c  %9d\r\n", GET_OBJ_NAME(obj),
-              GET_OBJ_TYPE(obj) == ITEM_CYBERWARE ? "Cyber" : "Bio", buf2, ((float)GET_OBJ_VAL(obj, 4) / 100),
-              GET_OBJ_TYPE(obj) == ITEM_CYBERWARE ? 'E' : 'I', buy_price(obj, shop_nr));
+      
+      if (IS_OBJ_STAT(obj, ITEM_NERPS)) {
+        sprintf(ENDOF(buf), "^Y(N)^n %-29s^n %-6s%2s   %0.2f%c  %9d\r\n", GET_OBJ_NAME(obj),
+                GET_OBJ_TYPE(obj) == ITEM_CYBERWARE ? "Cyber" : "Bio", buf2, ((float)GET_OBJ_VAL(obj, 4) / 100),
+                GET_OBJ_TYPE(obj) == ITEM_CYBERWARE ? 'E' : 'I', buy_price(obj, shop_nr));
+      } else {
+        sprintf(ENDOF(buf), "%-33s^n %-6s%2s   %0.2f%c  %9d\r\n", GET_OBJ_NAME(obj),
+                GET_OBJ_TYPE(obj) == ITEM_CYBERWARE ? "Cyber" : "Bio", buf2, ((float)GET_OBJ_VAL(obj, 4) / 100),
+                GET_OBJ_TYPE(obj) == ITEM_CYBERWARE ? 'E' : 'I', buy_price(obj, shop_nr));
+      }
       extract_obj(obj);
     }
   } else
@@ -760,8 +800,13 @@ void shop_list(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
         else
           sprintf(ENDOF(buf), "%-3d         ", sell->stock);
       }
+      
+      if (IS_OBJ_STAT(obj, ITEM_NERPS)) {
+        sprintf(ENDOF(buf), "^Y(N)^n %-44s^n %6d\r\n", GET_OBJ_NAME(obj), buy_price(obj, shop_nr));
+      } else {
         sprintf(ENDOF(buf), "%-48s^n %6d\r\n", GET_OBJ_NAME(obj),
                   buy_price(obj, shop_nr));
+      }
       if (strlen(buf) >= MAX_STRING_LENGTH - 200)
         break;
       extract_obj(obj);
@@ -896,6 +941,10 @@ void shop_info(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
       sprintf(ENDOF(buf), " %s", weapon_type[GET_OBJ_VAL(obj, 3)]);
       if (IS_OBJ_STAT(obj, ITEM_TWOHANDS))
         strcat(buf, " and requires two hands to wield correctly");
+      if (GET_WEAPON_INTEGRAL_RECOIL_COMP(obj))
+        sprintf(ENDOF(buf), ". It has %d round%s of built-in recoil compensation",
+                GET_WEAPON_INTEGRAL_RECOIL_COMP(obj),
+                GET_WEAPON_INTEGRAL_RECOIL_COMP(obj) > 1 ? "s" : "");
       if (GET_OBJ_VAL(obj, 7) > 0 || GET_OBJ_VAL(obj, 8) > 0 || GET_OBJ_VAL(obj, 9) > 0)
         strcat(buf, ". It comes standard with ");
       if (real_object(GET_OBJ_VAL(obj, 7)) > 0) {
@@ -1185,6 +1234,11 @@ void shop_info(char *arg, struct char_data *ch, struct char_data *keeper, vnum_t
     sprintf(ENDOF(buf), "%d grams", (int)(GET_OBJ_WEIGHT(obj) * 1000));
   } else sprintf(ENDOF(buf), "%.0f kilogram%s", GET_OBJ_WEIGHT(obj), (GET_OBJ_WEIGHT(obj) >= 2 ? "s" : ""));
   sprintf(ENDOF(buf), " and I couldn't let it go for less than %d nuyen.", buy_price(obj, shop_nr));
+  
+  if (IS_OBJ_STAT(obj, ITEM_NERPS)) {
+    strcat(buf, " ^Y(OOC: It has no special coded effects.)^n");
+  }
+  
   do_say(keeper, buf, cmd_say, SCMD_SAYTO);
   send_to_char(ch, "\r\n%s\r\n\r\n", obj->text.look_desc);
 }
@@ -1373,7 +1427,7 @@ void randomize_shop_prices(void)
     if (shop_table[i].random_amount)
       shop_table[i].random_current = number(-shop_table[i].random_amount, shop_table[i].random_amount);
     for (struct shop_sell_data *sell = shop_table[i].selling; sell; sell = sell->next)
-      for (int q = 0; q <= 4; q++)
+      for (int q = 0; q < SHOP_LAST_IDNUM_LIST_SIZE; q++)
         sell->lastidnum[q] = 0;
   }
 }
@@ -1539,12 +1593,12 @@ void shedit_disp_menu(struct descriptor_data *d)
   send_to_char(CH, "Shop Number: %ld\r\n", SHOP->vnum);
   send_to_char(CH, "1) Keeper: ^c%ld^n (^c%s^n)\r\n", SHOP->keeper,
                real_mobile(SHOP->keeper) > 0 ? GET_NAME(&mob_proto[real_mobile(SHOP->keeper)]) : "NULL");
-  send_to_char(CH, "2) Type: ^c%s^n\r\n", shop_type[SHOP->type]);
-  send_to_char(CH, "3) Buying Profit: ^c%.2f^n\r\n", SHOP->profit_buy);
-  send_to_char(CH, "4) Selling Profit: ^c%.2f^n\r\n", SHOP->profit_sell);
+  send_to_char(CH, "2) Shop Type (not implemented): ^c%s^n\r\n", shop_type[SHOP->type]);
+  send_to_char(CH, "3) Cost Multiplier when Player Buying: ^c%.2f^n\r\n", SHOP->profit_buy);
+  send_to_char(CH, "4) Cost Multiplier when Player Selling: ^c%.2f^n\r\n", SHOP->profit_sell);
   send_to_char(CH, "5) %% +/-: ^c%d^n\r\n", SHOP->random_amount);
   send_to_char(CH, "6) Opens: ^c%d^n Closes: ^c%d^n\r\n", SHOP->open, SHOP->close);
-  send_to_char(CH, "7) Etiquette: ^c%s^n\r\n", skills[SHOP->ettiquete].name);
+  send_to_char(CH, "7) Etiquette Used for Availability Rolls: ^c%s^n\r\n", skills[SHOP->ettiquete].name);
   SHOP->races.PrintBits(buf, MAX_STRING_LENGTH, pc_race_types, NUM_RACES);
   send_to_char(CH, "8) Doesn't Trade With: ^c%s^n\r\n", buf);
   SHOP->flags.PrintBits(buf, MAX_STRING_LENGTH, shop_flags, SHOP_FLAGS);
@@ -1590,7 +1644,7 @@ void shedit_parse(struct descriptor_data *d, const char *arg)
     switch(*arg) {
     case 'y':
     case 'Y':
-      if (!from_ip_zone(d->edit_number)) {
+      if (!vnum_from_non_connected_zone(d->edit_number)) {
         sprintf(buf,"%s wrote new shop #%ld",
                 GET_CHAR_NAME(d->character), d->edit_number);
         mudlog(buf, d->character, LOG_WIZLOG, TRUE);
@@ -1752,8 +1806,8 @@ void shedit_parse(struct descriptor_data *d, const char *arg)
     break;
   case SHEDIT_PROFIT_BUY:
     profit = atof(arg);
-    if (profit < 0) {
-      send_to_char("Profit must be greater than 0! Enter profit for sell command: ", CH);
+    if (profit < 1) {
+      send_to_char("Buy price multiplier must be at least 1! Enter multiplier: ", CH);
       return;
     }
     SHOP->profit_buy = profit;
@@ -1761,8 +1815,8 @@ void shedit_parse(struct descriptor_data *d, const char *arg)
     break;
   case SHEDIT_PROFIT_SELL:
     profit = atof(arg);
-    if (profit < 0) {
-      send_to_char("Profit must be greater than 0! Enter profit for sell command: ", CH);
+    if (profit > 1 || profit <= 0) {
+      send_to_char("Sell price multiplier must be greater than 0 and no more than 1! Enter multiplier: ", CH);
       return;
     }
     SHOP->profit_sell = profit;

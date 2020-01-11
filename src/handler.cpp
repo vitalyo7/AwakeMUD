@@ -545,57 +545,60 @@ void affect_total(struct char_data * ch)
       apply_focus_effect(ch, obj);
   /* effects of equipment */
   {
+    struct obj_data *worn_item = NULL;
     int suitbal = 0, suitimp = 0, suittype = 0,  highestbal = 0, highestimp = 0;
-    for (i = 0; i < (NUM_WEARS - 1); i++)
-      if (GET_EQ(ch, i))
-      {
+    for (i = 0; i < (NUM_WEARS - 1); i++) {
+      if ((worn_item = GET_EQ(ch, i))) {
         wearing = TRUE;
-        if (GET_OBJ_TYPE(GET_EQ(ch, i)) == ITEM_FOCUS)
-          apply_focus_effect(ch, GET_EQ(ch,i));
+        if (GET_OBJ_TYPE(worn_item) == ITEM_FOCUS)
+          apply_focus_effect(ch, worn_item);
         else
           for (j = 0; j < MAX_OBJ_AFFECT; j++)
             affect_modify(ch,
-                          GET_EQ(ch, i)->affected[j].location,
-                          GET_EQ(ch, i)->affected[j].modifier,
-                          GET_EQ(ch, i)->obj_flags.bitvector, TRUE);
-        if (GET_OBJ_TYPE(GET_EQ(ch, i)) == ITEM_WORN) {
-          if (GET_OBJ_VAL(GET_EQ(ch, i), 8) && (!suittype || suittype == GET_OBJ_VAL(GET_EQ(ch, i), 8))) {
-            suitbal += GET_OBJ_VAL(GET_EQ(ch, i), 5);
-            suitimp += GET_OBJ_VAL(GET_EQ(ch, i), 6);
-            suittype = GET_OBJ_VAL(GET_EQ(ch, i), 8);
-          } else if (GET_OBJ_VAL(GET_EQ(ch, i), 5) || GET_OBJ_VAL(GET_EQ(ch, i), 6)) {
+                          worn_item->affected[j].location,
+                          worn_item->affected[j].modifier,
+                          worn_item->obj_flags.bitvector, TRUE);
+        if (GET_OBJ_TYPE(worn_item) == ITEM_WORN) {
+          if (GET_WORN_MATCHED_SET(worn_item) && (!suittype || suittype == GET_WORN_MATCHED_SET(worn_item))) {
+            suitbal += GET_WORN_BALLISTIC(worn_item);
+            suitimp += GET_WORN_IMPACT(worn_item);
+            suittype = GET_WORN_MATCHED_SET(worn_item);
+          } else if (GET_WORN_BALLISTIC(worn_item) || GET_WORN_IMPACT(worn_item)) {
             int bal = 0, imp = 0;
-            if (GET_OBJ_VAL(GET_EQ(ch, i), 8)) {
-              bal = (int)(GET_OBJ_VAL(GET_EQ(ch, i), 5) / 100);
-              imp = (int)(GET_OBJ_VAL(GET_EQ(ch, i), 6) / 100);
+            if (GET_WORN_MATCHED_SET(worn_item)) {
+              bal = (int)(GET_WORN_BALLISTIC(worn_item) / 100);
+              imp = (int)(GET_WORN_IMPACT(worn_item) / 100);
             } else {
-              bal = GET_OBJ_VAL(GET_EQ(ch, i), 5);
-              imp = GET_OBJ_VAL(GET_EQ(ch, i), 6);
+              bal = GET_WORN_BALLISTIC(worn_item);
+              imp = GET_WORN_IMPACT(worn_item);
             }
-            for (j = 0; j < (NUM_WEARS - 1); j++)
-              if (GET_EQ(ch, j) && j != i && GET_OBJ_TYPE(GET_EQ(ch, j)) == ITEM_WORN) {
-                if ((highestbal || GET_OBJ_VAL(GET_EQ(ch, i), 5) <
-                     (GET_OBJ_VAL(GET_EQ(ch, j), 8) ? GET_OBJ_VAL(GET_EQ(ch, j), 5) / 100 : GET_OBJ_VAL(GET_EQ(ch, j), 5))) &&
-                    bal == GET_OBJ_VAL(GET_EQ(ch, i), 5))
+            struct obj_data *temp_item = NULL;
+            for (j = 0; j < (NUM_WEARS - 1); j++) {
+              if ((temp_item = GET_EQ(ch, j)) && j != i && GET_OBJ_TYPE(temp_item) == ITEM_WORN) {
+                if ((highestbal || GET_WORN_BALLISTIC(worn_item) <
+                     (GET_WORN_MATCHED_SET(temp_item) ? GET_WORN_BALLISTIC(temp_item) / 100 : GET_WORN_BALLISTIC(temp_item))) &&
+                    bal == GET_WORN_BALLISTIC(worn_item))
                   bal /= 2;
-                if ((highestimp || GET_OBJ_VAL(GET_EQ(ch, i), 6) <
-                     (GET_OBJ_VAL(GET_EQ(ch, j), 8) ? GET_OBJ_VAL(GET_EQ(ch, j), 6) / 100 : GET_OBJ_VAL(GET_EQ(ch, j), 6))) &&
-                    imp == GET_OBJ_VAL(GET_EQ(ch, i), 6))
+                if ((highestimp || GET_WORN_IMPACT(worn_item) <
+                     (GET_WORN_MATCHED_SET(temp_item) ? GET_WORN_IMPACT(temp_item) / 100 : GET_WORN_IMPACT(temp_item))) &&
+                    imp == GET_WORN_IMPACT(worn_item))
                   imp /= 2;
               }
-            if (bal == GET_OBJ_VAL(GET_EQ(ch, i), 5))
+            }
+            if (bal == GET_WORN_BALLISTIC(worn_item))
               highestbal = bal;
-            if (imp == GET_OBJ_VAL(GET_EQ(ch, i), 6))
+            if (imp == GET_WORN_IMPACT(worn_item))
               highestimp = imp;
             GET_IMPACT(ch) += imp;
             GET_BALLISTIC(ch) += bal;
-            if (!IS_OBJ_STAT(GET_EQ(ch, i), ITEM_FORMFIT)) {
-              GET_TOTALIMP(ch) += GET_OBJ_VAL(GET_EQ(ch, i), 6) / (GET_OBJ_VAL(GET_EQ(ch, i), 8) ? 100 : 1);
-              GET_TOTALBAL(ch) += GET_OBJ_VAL(GET_EQ(ch, i), 5) / (GET_OBJ_VAL(GET_EQ(ch, i), 8) ? 100 : 1);
+            if (!IS_OBJ_STAT(worn_item, ITEM_FORMFIT)) {
+              GET_TOTALIMP(ch) += GET_WORN_BALLISTIC(worn_item) / (GET_WORN_MATCHED_SET(worn_item) ? 100 : 1);
+              GET_TOTALBAL(ch) += GET_WORN_IMPACT(worn_item) / (GET_WORN_MATCHED_SET(worn_item) ? 100 : 1);
             }
           }
         }
       }
+    }
     if (suitbal || suitimp) {
       suitimp /= 100;
       suitbal /= 100;
@@ -916,8 +919,8 @@ void affect_total(struct char_data * ch)
       AFF_FLAGS(ch).RemoveBits(AFF_INVISIBLE, AFF_IMP_INVIS, ENDBIT);
   }
   if (GET_EQ(ch, WEAR_WIELD) && GET_OBJ_TYPE(GET_EQ(ch, WEAR_WIELD)) == ITEM_WEAPON) {
-    if (!IS_GUN(GET_OBJ_VAL(GET_EQ(ch, WEAR_WIELD), 3)) && GET_OBJ_VAL(GET_EQ(ch, WEAR_WIELD), 6) > 0)
-      GET_REACH(ch) += GET_OBJ_VAL(GET_EQ(ch, WEAR_WIELD), 6);
+    if (!IS_GUN(GET_OBJ_VAL(GET_EQ(ch, WEAR_WIELD), 3)) && GET_WEAPON_REACH(GET_EQ(ch, WEAR_WIELD)) > 0)
+      GET_REACH(ch) += GET_WEAPON_REACH(GET_EQ(ch, WEAR_WIELD));
     else if (IS_GUN(GET_OBJ_VAL(GET_EQ(ch, WEAR_WIELD), 3))) {
       if (GET_OBJ_VAL(GET_EQ(ch, WEAR_WIELD), 4) != SKILL_PISTOLS)
         GET_REACH(ch)++;
@@ -999,41 +1002,43 @@ void char_from_room(struct char_data * ch)
   if (CH_IN_COMBAT(ch))
     stop_fighting(ch);
   
-  if (GET_EQ(ch, WEAR_LIGHT) != NULL)
-    if (GET_OBJ_TYPE(GET_EQ(ch, WEAR_LIGHT)) == ITEM_LIGHT)
-      if (GET_OBJ_VAL(GET_EQ(ch, WEAR_LIGHT), 2))       /* Light is ON */
-        ch->in_room->light[0]--;
-  if (affected_by_spell(ch, SPELL_LIGHT) && !--ch->in_room->light[0])
-    ch->in_room->light[1] = 0;
-  if (affected_by_spell(ch, SPELL_SHADOW) && !--ch->in_room->shadow[0])
-    ch->in_room->shadow[1] = 0;
-  if (affected_by_spell(ch, SPELL_POLTERGEIST) && !--ch->in_room->poltergeist[0])
-    ch->in_room->poltergeist[1] = 0;
-  if (affected_by_spell(ch, SPELL_SILENCE) && !--ch->in_room->silence[0])
-    ch->in_room->silence[1] = 0;
-  if (ch->in_veh)
-  {
+  if (ch->in_room) {
+    // Character is in a room. Clean up room effects sourced by character.
+    if (GET_EQ(ch, WEAR_LIGHT) != NULL)
+      if (GET_OBJ_TYPE(GET_EQ(ch, WEAR_LIGHT)) == ITEM_LIGHT)
+        if (GET_OBJ_VAL(GET_EQ(ch, WEAR_LIGHT), 2))       /* Light is ON */
+          ch->in_room->light[0]--;
+    if (affected_by_spell(ch, SPELL_LIGHT) && !--ch->in_room->light[0])
+      ch->in_room->light[1] = 0;
+    if (affected_by_spell(ch, SPELL_SHADOW) && !--ch->in_room->shadow[0])
+      ch->in_room->shadow[1] = 0;
+    if (affected_by_spell(ch, SPELL_POLTERGEIST) && !--ch->in_room->poltergeist[0])
+      ch->in_room->poltergeist[1] = 0;
+    if (affected_by_spell(ch, SPELL_SILENCE) && !--ch->in_room->silence[0])
+      ch->in_room->silence[1] = 0;
+    if (IS_SENATOR(ch) && PRF_FLAGGED(ch, PRF_PACIFY) && ch->in_room->peaceful > 0)
+      ch->in_room->peaceful--;
+    
+    // Remove them from the room.
+    REMOVE_FROM_LIST(ch, ch->in_room->people, next_in_room);
+    ch->in_room = NULL;
+    ch->next_in_room = NULL;
+    CHAR_X(ch) = CHAR_Y(ch) = 0;
+  } else  {
+    // Character is in a vehicle. Remove them from it.
     REMOVE_FROM_LIST(ch, ch->in_veh->people, next_in_veh);
     stop_manning_weapon_mounts(ch, TRUE);
     ch->in_veh->seating[ch->vfront]++;
     ch->in_veh = NULL;
     ch->next_in_veh = NULL;
     AFF_FLAGS(ch).RemoveBit(AFF_PILOT);
-  } else
-  {
-    if (IS_SENATOR(ch) && PRF_FLAGGED(ch, PRF_PACIFY) && ch->in_room->peaceful > 0)
-      ch->in_room->peaceful--;
-    REMOVE_FROM_LIST(ch, ch->in_room->people, next_in_room);
-    ch->in_room = NULL;
-    ch->next_in_room = NULL;
-    CHAR_X(ch) = CHAR_Y(ch) = 0;
   }
 }
 
 void char_to_veh(struct veh_data * veh, struct char_data * ch)
 {
   if (!veh || !ch)
-    log("SYSLOG: Illegal value(s) passed to char_to_veh");
+    mudlog("SYSLOG: Illegal value(s) passed to char_to_veh", NULL, LOG_SYSLOG, TRUE);
   else {
     if (ch->in_room || ch->in_veh)
       char_from_room(ch);
@@ -1049,7 +1054,7 @@ void char_to_veh(struct veh_data * veh, struct char_data * ch)
 void veh_to_room(struct veh_data * veh, struct room_data *room)
 {
   if (!veh || !room)
-    log("SYSLOG: Illegal value(s) passed to veh_to_room");
+    mudlog("SYSLOG: Illegal value(s) passed to veh_to_room", NULL, LOG_SYSLOG, TRUE);
   else
   {
     if (veh->in_veh || veh->in_room)
@@ -1065,7 +1070,7 @@ void veh_to_room(struct veh_data * veh, struct room_data *room)
 void veh_to_veh(struct veh_data *veh, struct veh_data *dest)
 {
   if (!veh || !dest)
-    log("SYSLOG: Illegal value(s) passed to veh_to_veh");
+    mudlog("SYSLOG: Illegal value(s) passed to veh_to_veh", NULL, LOG_SYSLOG, TRUE);
   else {
     if (veh->in_veh || veh->in_room)
       veh_from_room(veh);
@@ -1092,7 +1097,7 @@ void icon_to_host(struct matrix_icon *icon, vnum_t to_host)
 {
   extern void make_seen(struct matrix_icon *icon, int idnum);
   if (!icon || to_host < 0 || to_host > top_of_matrix)
-    log("SYSLOG: Illegal value(s) passed to icon_to_host");
+    mudlog("SYSLOG: Illegal value(s) passed to icon_to_host", NULL, LOG_SYSLOG, TRUE);
   else
   {
     if (icon->decker)
@@ -1196,100 +1201,176 @@ void char_to_room(struct char_data * ch, struct room_data *room)
 
 #define IS_INVIS(o) IS_OBJ_STAT(o, ITEM_INVISIBLE)
 
+// Checks obj_to_x preconditions for common errors. Overwrites buf3. Returns TRUE for kosher, FALSE otherwise.
+bool check_obj_to_x_preconditions(struct obj_data * object, struct char_data *ch) {
+  if (!object) {
+    mudlog("ERROR: Null object passed to check_obj_to_x_preconditions().", NULL, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  
+  // Pre-compose our message header.
+  sprintf(buf3, "ERROR: check_obj_to_x_preconditions() failure for %s (%ld): ", GET_OBJ_NAME(object), GET_OBJ_VNUM(object));
+  
+  // Fail if the object already has next_content. This implies that it's part of someone else's linked list-- never merge them!
+  if (object->next_content) {
+    strcat(ENDOF(buf3), "It's already part of a next_content linked list.");
+    mudlog(buf3, ch, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+
+  // We can't give an object away that's already someone else's possession.
+  if (object->carried_by) {
+    sprintf(ENDOF(buf3), "Object already belongs to %s.", GET_CHAR_NAME(object->carried_by));
+    mudlog(buf3, ch, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  
+  // We can't give an object away if it's sitting in a room.
+  if (object->in_room) {
+    sprintf(ENDOF(buf3), "Object is already in room %ld.", object->in_room->number);
+    mudlog(buf3, ch, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  
+  // We can't give an object away if it's in a vehicle.
+  if (object->in_veh) {
+    sprintf(ENDOF(buf3), "Object is already in vehicle %s.", GET_VEH_NAME(object->in_veh));
+    mudlog(buf3, ch, LOG_SYSLOG, TRUE);
+    return FALSE;
+  }
+  
+  strcpy(buf3, "");
+  return TRUE;
+}
+
 /* give an object to a char   */
 void obj_to_char(struct obj_data * object, struct char_data * ch)
 {
   struct obj_data *i = NULL, *op = NULL;
   
-  if (object && ch)
-  {
-    if (object->carried_by) {
-      sprintf(buf, "Obj_to_char error on %s giving to %s. Already belongs to %s.", object->text.name,
-              GET_CHAR_NAME(ch) ? GET_CHAR_NAME(ch) : GET_NAME(ch),
-              GET_CHAR_NAME(object->carried_by) ? GET_CHAR_NAME(object->carried_by) : GET_NAME(object->carried_by));
-      mudlog(buf, ch, LOG_WIZLOG, TRUE);
-      
+  // Check our object-related preconditions. All error logging is done there.
+  if (!check_obj_to_x_preconditions(object, ch)) {
+    return;
+  }
+  
+  // Precondition: The character in question must exist.
+  if (!ch) {
+    mudlog("SYSLOG: NULL char passed to obj_to_char", NULL, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  // Iterate over the objects that the character already has.
+  for (i = ch->carrying; i; i = i->next_content) {
+    // Attempt at additional error detection.
+    if (object == i) {
+      mudlog("ERROR: i == object in obj_to_char(). How we even got here, I don't know.", ch, LOG_SYSLOG, TRUE);
       return;
-    } else if (object->in_room) {
-      sprintf(buf, "Obj_to_char error on %s giving to %s. Already in %ld.", object->text.name,
-              GET_CHAR_NAME(ch) ? GET_CHAR_NAME(ch) : GET_NAME(ch), object->in_room->number);
-      mudlog(buf, ch, LOG_WIZLOG, TRUE);
-      return;
-    }
-    for (i = ch->carrying; i; i = i->next_content) {
-      if (i->item_number == object->item_number &&
-          !strcmp(i->text.room_desc, object->text.room_desc))
-        break;
-      op = i;
     }
     
-    if (i) {
-      object->next_content = i;
-      if (op)
-        op->next_content = object;
-      else
-        ch->carrying = object;
-    } else {
-      object->next_content = ch->carrying;
+    // If their inventory list has turned into an infinite loop due to a bug, warn about it and bail out here instead of hanging the MUD.
+    if (i == i->next_content) {
+      sprintf(buf3, "ERROR: Infinite loop detected in obj_to_char. Looping object is %s (%ld). Bailing out, %s is not getting %s %s (%ld).",
+              GET_OBJ_NAME(i), GET_OBJ_VNUM(i),
+              GET_CHAR_NAME(ch) ? GET_CHAR_NAME(ch) : GET_NAME(ch), HSHR(ch),
+              GET_OBJ_NAME(object), GET_OBJ_VNUM(object));
+      mudlog(buf3, ch, LOG_SYSLOG, TRUE);
+      return;
+    }
+    // If they already have a copy of this object, break out of the loop while preserving i as pointing to that copy and op as pointing to the last thing we processed (if anything).
+    if (i->item_number == object->item_number && !strcmp(i->text.room_desc, object->text.room_desc)) {
+      break;
+    }
+    op = i;
+  }
+  
+  // If i exists (e.g. we broke out of the loop early by finding a match to this item we're trying to give the character)...
+  if (i) {
+    // Set our to-give object's next_content to the matching item i.
+    object->next_content = i;
+    // If op exists (which points to the object we evaluated immediately before i), point its next_content to object. Essentially this is a linked list insert.
+    if (op) {
+      op->next_content = object;
+    }
+    // Otherwise, we know our object that we're giving them is the head of their carrying list-- set it as such.
+    else {
       ch->carrying = object;
     }
-    
-    object->carried_by = ch;
-    object->in_room = NULL;
-    IS_CARRYING_W(ch) += GET_OBJ_WEIGHT(object);
-    IS_CARRYING_N(ch)++;
-    
-    if (GET_OBJ_TYPE(object) == ITEM_FOCUS)
-      apply_focus_effect(ch, object);
-    
-  } else
-    log("SYSLOG: NULL obj or char passed to obj_to_char");
+  }
+  // Otherwise, stick the new object at the head of their inventory list.
+  else {
+    object->next_content = ch->carrying;
+    ch->carrying = object;
+  }
+  
+  // Set the object as being carried by this character, and increase their carry weight and carry number accordingly.
+  object->carried_by = ch;
+  IS_CARRYING_W(ch) += GET_OBJ_WEIGHT(object);
+  IS_CARRYING_N(ch)++;
+  
+  // Apply focus effects as needed.
+  if (GET_OBJ_TYPE(object) == ITEM_FOCUS) {
+    apply_focus_effect(ch, object);
+  }
 }
 
 void obj_to_cyberware(struct obj_data * object, struct char_data * ch)
 {
-  if (object && ch)
-  {
-    if (GET_OBJ_TYPE(object) != ITEM_CYBERWARE) {
-      log("Non-cyberware object type passed to obj_to_cyberware.");
-      return;
-    }
-    
-    object->next_content = ch->cyberware;
-    ch->cyberware = object;
-    object->carried_by = ch;
-    object->in_room = NULL;
-    affect_total(ch);
-  } else
-    log("SYSLOG: NULL obj or char passed to obj_to_cyberware");
+  // Check our object-related preconditions. All error logging is done there.
+  if (!check_obj_to_x_preconditions(object, ch))
+    return;
+  
+  // Precondition: The character in question must exist.
+  if (!ch) {
+    mudlog("SYSLOG: NULL char passed to obj_to_cyberware", NULL, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  // It's gotta be cyberware in order to be a valid obj_to_cyberware target.
+  if (GET_OBJ_TYPE(object) != ITEM_CYBERWARE) {
+    log("Non-cyberware object type passed to obj_to_cyberware.");
+    return;
+  }
+  
+  object->next_content = ch->cyberware;
+  ch->cyberware = object;
+  object->carried_by = ch;
+  object->in_room = NULL;
+  affect_total(ch);
 }
 
 void obj_to_bioware(struct obj_data * object, struct char_data * ch)
 {
   int temp;
   
-  if (object && ch)
-  {
-    if (GET_OBJ_TYPE(object) != ITEM_BIOWARE) {
-      log("Non-bioware object type passed to obj_to_bioware.");
-      return;
-    }
-    
-    object->next_content = ch->bioware;
-    ch->bioware = object;
-    object->carried_by = ch;
-    object->in_room = NULL;
-    
-    if (GET_OBJ_VAL(object, 0) != BIO_ADRENALPUMP || GET_OBJ_VAL(object, 5) > 0)
-      for (temp = 0; temp < MAX_OBJ_AFFECT; temp++)
-        affect_modify(ch,
-                      object->affected[temp].location,
-                      object->affected[temp].modifier,
-                      object->obj_flags.bitvector, TRUE);
-    
-    affect_total(ch);
-  } else
-    log("SYSLOG: NULL obj or char passed to obj_to_bioware");
+  // Check our object-related preconditions. All error logging is done there.
+  if (!check_obj_to_x_preconditions(object, ch))
+    return;
+  
+  // Precondition: The character in question must exist.
+  if (!ch) {
+    mudlog("SYSLOG: NULL char passed to obj_to_bioware", NULL, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  // It's gotta be bioware to be a valid obj_to_bioware target.
+  if (GET_OBJ_TYPE(object) != ITEM_BIOWARE) {
+    log("Non-bioware object type passed to obj_to_bioware.");
+    return;
+  }
+  
+  object->next_content = ch->bioware;
+  ch->bioware = object;
+  object->carried_by = ch;
+  object->in_room = NULL;
+  
+  if (GET_OBJ_VAL(object, 0) != BIO_ADRENALPUMP || GET_OBJ_VAL(object, 5) > 0)
+    for (temp = 0; temp < MAX_OBJ_AFFECT; temp++)
+      affect_modify(ch,
+                    object->affected[temp].location,
+                    object->affected[temp].modifier,
+                    object->obj_flags.bitvector, TRUE);
+  
+  affect_total(ch);
 }
 
 void obj_from_bioware(struct obj_data *bio)
@@ -1521,7 +1602,7 @@ struct obj_data *get_obj_in_list_num(int num, struct obj_data * list)
   return NULL;
 }
 
-int from_ip_zone(int vnum)
+int vnum_from_non_connected_zone(int vnum)
 {
   int counter;
   if (vnum == -1)  // obj made using create_obj, like mail and corpses
@@ -1566,75 +1647,87 @@ struct char_data *get_char_room(const char *name, struct room_data *room)
 void obj_to_veh(struct obj_data * object, struct veh_data * veh)
 {
   struct obj_data *i = NULL, *op = NULL;
-  if (!object || !veh)
-    log("SYSLOG: Illegal value(s) passed to obj_to_veh");
-  else
-  {
-    for (i = veh->contents; i; i = i->next_content) {
-      if (i->item_number == object->item_number &&
-          !strcmp(i->text.room_desc, object->text.room_desc) &&
-          IS_INVIS(i) == IS_INVIS(object))
-        break;
-      
-      op = i;
-    }
-    
-    if (i) {
-      object->next_content = i;
-      if (op)
-        op->next_content = object;
-      else
-        veh->contents = object;
-    } else {
-      object->next_content = veh->contents;
-      veh->contents = object;
-    }
-    veh->usedload += GET_OBJ_WEIGHT(object);
-    object->in_veh = veh;
-    object->in_room = NULL;
-    object->carried_by = NULL;
+  
+  // Check our object-related preconditions. All error logging is done there.
+  if (!check_obj_to_x_preconditions(object, NULL))
+    return;
+  
+  // Precondition: The vehicle in question must exist.
+  if (!veh) {
+    mudlog("SYSLOG: NULL vehicle passed to obj_to_veh.", NULL, LOG_SYSLOG, TRUE);
+    return;
   }
+  
+  for (i = veh->contents; i; i = i->next_content) {
+    if (i->item_number == object->item_number &&
+        !strcmp(i->text.room_desc, object->text.room_desc) &&
+        IS_INVIS(i) == IS_INVIS(object))
+      break;
+    
+    op = i;
+  }
+  
+  if (i) {
+    object->next_content = i;
+    if (op)
+      op->next_content = object;
+    else
+      veh->contents = object;
+  } else {
+    object->next_content = veh->contents;
+    veh->contents = object;
+  }
+  
+  veh->usedload += GET_OBJ_WEIGHT(object);
+  object->in_veh = veh;
+  object->in_room = NULL;
+  object->carried_by = NULL;
 }
 /* put an object in a room */
 void obj_to_room(struct obj_data * object, struct room_data *room)
 {
   struct obj_data *i = NULL, *op = NULL;
   
-  if (!object || !room)
-    log("SYSLOG: Illegal value(s) passed to obj_to_room");
-  else
-  {
-    for (i = room->contents; i; i = i->next_content) {
-      if (i->item_number == object->item_number &&
-          !strcmp(i->text.room_desc, object->text.room_desc) &&
-          IS_INVIS(i) == IS_INVIS(object))
-        break;
-      
-      op = i;
-    }
-    
-    if (op == object) {
-      log("SYSLOG: WTF? ^.^");
-      return;
-    }
-    if (i) {
-      object->next_content = i;
-      if (op)
-        op->next_content = object;
-      else
-        room->contents = object;
-    } else {
-      object->next_content = room->contents;
-      room->contents = object;
-    }
-    
-    object->in_room = room;
-    object->carried_by = NULL;
-    
-    // If it's a workshop, make sure the room's workshops[] table reflects this.
-    if (GET_OBJ_TYPE(object) == ITEM_WORKSHOP)
-      add_workshop_to_room(object);
+  // Check our object-related preconditions. All error logging is done there.
+  if (!check_obj_to_x_preconditions(object, NULL))
+    return;
+  
+  // Precondition: The room in question must exist.
+  if (!room) {
+    mudlog("SYSLOG: NULL room passed to obj_to_room.", NULL, LOG_SYSLOG, TRUE);
+    return;
   }
+  
+  for (i = room->contents; i; i = i->next_content) {
+    if (i->item_number == object->item_number &&
+        !strcmp(i->text.room_desc, object->text.room_desc) &&
+        IS_INVIS(i) == IS_INVIS(object))
+      break;
+    
+    op = i;
+  }
+  
+  if (op == object) {
+    log("SYSLOG: WTF? ^.^");
+    return;
+  }
+  if (i) {
+    object->next_content = i;
+    if (op)
+      op->next_content = object;
+    else
+      room->contents = object;
+  } else {
+    object->next_content = room->contents;
+    room->contents = object;
+  }
+  
+  object->in_room = room;
+  object->carried_by = NULL;
+  
+  // If it's a workshop, make sure the room's workshops[] table reflects this.
+  if (GET_OBJ_TYPE(object) == ITEM_WORKSHOP)
+    add_workshop_to_room(object);
 }
 
 
@@ -1669,6 +1762,22 @@ void obj_to_obj(struct obj_data * obj, struct obj_data * obj_to)
 {
   struct obj_data *tmp_obj;
   struct obj_data *i = NULL, *op = NULL;
+  
+  // Check our object-related preconditions. All error logging is done there.
+  if (!check_obj_to_x_preconditions(obj, NULL))
+    return;
+  
+  // Precondition: The object we're putting it in must exist.
+  if (!obj_to) {
+    mudlog("SYSLOG: NULL obj_to passed to obj_to_obj", NULL, LOG_SYSLOG, TRUE);
+    return;
+  }
+  
+  // Precondition: We can't fold it in on itself.
+  if (obj == obj_to) {
+    mudlog("ERROR: Attempting to put an object inside of itself in obj_to_obj().", NULL, LOG_SYSLOG, TRUE);
+    return;
+  }
   
   for (i = obj_to->contains; i; i = i->next_content)
   {
@@ -1810,11 +1919,11 @@ void extract_veh(struct veh_data * veh)
 {
   if (veh->in_room == NULL && veh->in_veh == NULL) {
     if (veh->carriedvehs || veh->people) {
-      sprintf(buf, "SYSERR: extract_veh called on vehicle-with-contents without containing room or veh!");
+      sprintf(buf, "SYSERR: extract_veh called on vehicle-with-contents without containing room or veh! The game will likely now shit itself and die; GLHF.");
       mudlog(buf, NULL, LOG_SYSLOG, TRUE);
     }
   }
-  // If any vehicle are inside, drop them where the vehicle is.
+  // If any vehicles are inside, drop them where the vehicle is.
   struct veh_data *temp = NULL;
   while ((temp = veh->carriedvehs)) {
     sprintf(buf, "As %s disintegrates, %s falls out!\r\n", veh->short_description, temp->short_description);
@@ -1846,6 +1955,26 @@ void extract_veh(struct veh_data * veh)
       char_from_room(ch);
       char_to_room(ch, &world[real_room(RM_DANTES_GARAGE)]);
     }
+  }
+  
+  // Unhitch its tows.
+  if (veh->towing) {
+    strcpy(buf3, GET_VEH_NAME(veh));
+    sprintf(buf, "%s falls from %s's towing equipment.\r\n", GET_VEH_NAME(veh->towing), buf3);
+    if (ch->in_veh->in_room) {
+      act(buf, FALSE, ch->in_veh->in_room->people, 0, 0, TO_ROOM);
+      act(buf, FALSE, ch->in_veh->in_room->people, 0, 0, TO_CHAR);
+      veh_to_room(veh->towing, veh->in_room);
+    } else if (ch->in_veh->in_veh){
+      send_to_veh(buf, ch->in_veh->in_veh, ch, TRUE);
+      veh_to_veh(veh->towing, veh->in_veh);
+    } else {
+      sprintf(buf, "SYSERR: Veh %s (%ld) has neither in_room nor in_veh! Dropping towed veh in Dante's Garage.", GET_VEH_NAME(ch->in_veh), ch->in_veh->idnum);
+      mudlog(buf, ch, LOG_SYSLOG, TRUE);
+      // Can't stop, we're already blowing up the vehicle. Drop it in Dante's garage.
+      veh_to_room(veh->towing, &world[real_room(RM_DANTES_GARAGE)]);
+    }
+    veh->towing = NULL;
   }
   
   // Perform actual vehicle extraction.
@@ -2088,10 +2217,11 @@ void extract_char(struct char_data * ch)
     extract_icon(ch->persona);
     ch->persona = NULL;
     PLR_FLAGS(ch).RemoveBit(PLR_MATRIX);
-  } else if (PLR_FLAGGED(ch, PLR_MATRIX))
+  } else if (PLR_FLAGGED(ch, PLR_MATRIX) && ch->in_room) {
     for (struct char_data *temp = ch->in_room->people; temp; temp = temp->next_in_room)
       if (PLR_FLAGGED(temp, PLR_MATRIX))
         temp->persona->decker->hitcher = NULL;
+  }
   
   /* end astral tracking */
   if (AFF_FLAGGED(ch, AFF_TRACKED))
@@ -2310,7 +2440,7 @@ struct obj_data *get_obj_vis(struct char_data * ch, char *name)
     return i;
   
   /* scan room */
-  if ((i = get_obj_in_list_vis(ch, name, ch->in_room->contents)))
+  if (ch->in_room && (i = get_obj_in_list_vis(ch, name, ch->in_room->contents)))
     return i;
   
   strcpy(tmp, name);

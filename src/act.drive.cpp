@@ -434,8 +434,9 @@ void do_raw_ram(struct char_data *ch, struct veh_data *veh, struct veh_data *tve
       target += 4;
     else if (vehm < tvehm)
       target += 2;
-    sprintf(buf, "%s heads straight towards your ride.\r\n", GET_VEH_NAME(veh));
-    sprintf(buf1, "%s heads straight towards %s.\r\n", GET_VEH_NAME(veh), GET_VEH_NAME(tveh));
+    strcpy(buf3, GET_VEH_NAME(veh));
+    sprintf(buf, "%s heads straight towards your ride.\r\n", buf3);
+    sprintf(buf1, "%s heads straight towards %s.\r\n", buf3, GET_VEH_NAME(tveh));
     sprintf(buf2, "You attempt to ram %s.\r\n", GET_VEH_NAME(tveh));
     send_to_veh(buf, tveh, 0, TRUE);
     send_to_room(buf1, veh->in_room);
@@ -447,8 +448,8 @@ void do_raw_ram(struct char_data *ch, struct veh_data *veh, struct veh_data *tve
     act(buf, FALSE, vict, 0, 0, TO_CHAR);
     act(buf1, FALSE, vict, 0, 0, TO_ROOM);
     act("You head straight towards $N.", FALSE, ch, 0, vict, TO_CHAR);
-    if (success_test(GET_REA(vict), 4)) {
-      send_to_char(ch, "You quickly let out an attack at it!\r\n");
+    if (GET_POS(vict) > POS_RESTING && success_test(GET_REA(vict), 4)) {
+      send_to_char(vict, "You quickly let out an attack at it!\r\n");
       act("$n quickly lets an attack fly.", FALSE, vict, 0, 0, TO_ROOM);
       act("$N suddenly attacks!", FALSE, ch, 0, vict, TO_CHAR);
       AFF_FLAGS(vict).SetBit(AFF_COUNTER_ATT);
@@ -820,6 +821,8 @@ ACMD(do_control)
   }
   if (!veh->in_room && !veh->in_veh) {
     send_to_char("You can't seem to make contact with it.\r\n", ch);
+    sprintf(buf, "SYSERR: Vehicle %s is not located in a valid room or vehicle!\r\n", GET_VEH_NAME(veh));
+    mudlog(buf, ch, LOG_SYSLOG, TRUE);
     return;
   }
   if (PLR_FLAGGED(ch, PLR_REMOTE))
@@ -1403,7 +1406,8 @@ void do_raw_target(struct char_data *ch, struct veh_data *veh, struct veh_data *
     if (AFF_FLAGGED(ch, AFF_MANNING)) {
       sprintf(buf, "%s's %s swivels towards your ride.\r\n", GET_VEH_NAME(ch->in_veh), GET_OBJ_NAME(obj));
       send_to_veh(buf, tveh, 0, TRUE);
-      sprintf(buf, "%s's $p swivels towards %s.\r\n", GET_VEH_NAME(ch->in_veh), GET_VEH_NAME(tveh));
+      strcpy(buf3, GET_VEH_NAME(ch->in_veh));
+      sprintf(buf, "%s's $p swivels towards %s.\r\n", buf3, GET_VEH_NAME(tveh));
       act(buf, FALSE, ch, obj, NULL, TO_VEH_ROOM);
     }
   } else {
@@ -1779,18 +1783,26 @@ ACMD(do_tow)
     return;
   }
   if (veh->towing) {
-    sprintf(buf, "%s releases %s from its towing equipment.\r\n", GET_VEH_NAME(veh), GET_VEH_NAME(veh->towing));
+    // Compose our release message, which is emitted if the release processes successfully.
+    strcpy(buf3, GET_VEH_NAME(veh));
+    sprintf(buf, "%s releases %s from its towing equipment.\r\n", buf3, GET_VEH_NAME(veh->towing));
+    
     if (ch->in_veh->in_room) {
       act(buf, FALSE, ch->in_veh->in_room->people, 0, 0, TO_ROOM);
       act(buf, FALSE, ch->in_veh->in_room->people, 0, 0, TO_CHAR);
+      veh_to_room(veh->towing, veh->in_room);
+      veh->towing = NULL;
     } else if (ch->in_veh->in_veh){
       send_to_veh(buf, ch->in_veh->in_veh, ch, TRUE);
+      veh_to_veh(veh->towing, veh->in_veh);
     } else {
       sprintf(buf, "SYSERR: Veh %s (%ld) has neither in_room nor in_veh!", GET_VEH_NAME(ch->in_veh), ch->in_veh->idnum);
+      send_to_char("The game system encountered an error. Tow not released.\r\n", ch);
       mudlog(buf, ch, LOG_SYSLOG, TRUE);
+      return;
     }
+
     send_to_char(ch, "You release %s from your towing equipment.\r\n", GET_VEH_NAME(veh->towing));
-    veh_to_room(veh->towing, veh->in_room);
     veh->towing = NULL;
     return;
   }
@@ -1815,7 +1827,8 @@ ACMD(do_tow)
     send_to_char("Drones can only tow drones that are lighter than them.\r\n", ch);
   else {
     send_to_char(ch, "You pick up %s with your towing equipment.\r\n", GET_VEH_NAME(tveh));
-    sprintf(buf, "%s picks up %s with its towing equipment.\r\n", GET_VEH_NAME(veh), GET_VEH_NAME(tveh));
+    strcpy(buf3, GET_VEH_NAME(veh));
+    sprintf(buf, "%s picks up %s with its towing equipment.\r\n", buf3, GET_VEH_NAME(tveh));
     if (ch->in_veh->in_room) {
       act(buf, FALSE, ch->in_veh->in_room->people, 0, 0, TO_ROOM);
       act(buf, FALSE, ch->in_veh->in_room->people, 0, 0, TO_CHAR);
@@ -1898,13 +1911,15 @@ ACMD(do_push)
     else if (!(veh = get_veh_list(argument, ch->in_veh->carriedvehs, ch)))
       send_to_char("That vehicle isn't in here.\r\n", ch);
     else {
-      send_to_char(ch, "You push %s out of the back.\r\n", GET_VEH_NAME(veh));
-      sprintf(buf, "$n pushes %s out of the back.", GET_VEH_NAME(veh));
-      sprintf(buf2, "$N pushes %s out of the back of %s.", GET_VEH_NAME(veh), GET_VEH_NAME(ch->in_veh));
+      strcpy(buf3, GET_VEH_NAME(veh));
+      send_to_char(ch, "You push %s out of the back.\r\n", buf3);
+      sprintf(buf, "$n pushes %s out of the back.", buf3);
+      sprintf(buf2, "$N pushes %s out of the back of %s.", buf3, GET_VEH_NAME(ch->in_veh));
       act(buf, FALSE, ch, NULL, NULL, TO_ROOM);
       if (ch->in_veh->in_room) {
-        act(buf2, FALSE, ch->in_veh->in_room->people, 0, 0, TO_NOTVICT);
+        act(buf2, FALSE, ch, 0, 0, TO_VEH_ROOM);
       } else if (ch->in_veh->in_veh){
+        // TODO: test this, doesn't it send '$n pushes...'?
         send_to_veh(buf, ch->in_veh->in_veh, ch, TRUE);
       } else {
         sprintf(buf, "SYSERR: Veh %s (%ld) has neither in_room nor in_veh!", GET_VEH_NAME(ch->in_veh), ch->in_veh->idnum);
@@ -1943,11 +1958,12 @@ ACMD(do_push)
       send_to_char("There is not enough room in there for that.\r\n", ch);
     else if (found_veh->locked)
       send_to_char("You can't push it into a locked vehicle.\r\n", ch);
-    else if (veh->locked && veh->damage < 10 && veh->type != VEH_DRONE)
+    else if (veh->locked && veh->damage < 10)
       send_to_char("The wheels seem to be locked.\r\n", ch);
     else {
-      sprintf(buf, "$n pushes %s into the back of %s.", GET_VEH_NAME(veh), GET_VEH_NAME(found_veh));
-      send_to_char(ch, "You push %s into the back of %s.\r\n", GET_VEH_NAME(veh), GET_VEH_NAME(found_veh));
+      strcpy(buf2, GET_VEH_NAME(veh));
+      sprintf(buf, "$n pushes %s into the back of %s.", buf2, GET_VEH_NAME(found_veh));
+      send_to_char(ch, "You push %s into the back of %s.\r\n", buf2, GET_VEH_NAME(found_veh));
       act(buf, 0, ch, 0, 0, TO_ROOM);
       sprintf(buf2, "You are pushed into %s.\r\n", GET_VEH_NAME(found_veh));
       send_to_veh(buf2, veh, NULL, TRUE);

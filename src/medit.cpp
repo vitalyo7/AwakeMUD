@@ -299,7 +299,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
     case 'y':
     case 'Y':
       // first write to the internal tables
-      if (!from_ip_zone(d->edit_number)) {
+      if (!vnum_from_non_connected_zone(d->edit_number)) {
         sprintf(buf,"%s wrote new mob #%ld",
                 GET_CHAR_NAME(d->character), d->edit_number);
         mudlog(buf, d->character, LOG_WIZLOG, TRUE);
@@ -818,9 +818,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
       medit_disp_skill_menu(d);
     } else {
       MOB->mob_specials.mob_skills[1] = number;
-      GET_SKILL(MOB, MOB->mob_specials.mob_skills[0]) = MOB->mob_specials.mob_skills[1];
-      SET_SKILL(MOB, MOB->mob_specials.mob_skills[0],
-                MOB->mob_specials.mob_skills[1]);
+      SET_SKILL(MOB, MOB->mob_specials.mob_skills[0], MOB->mob_specials.mob_skills[1]);
       d->edit_mode = MEDIT_SKILLS;
       medit_disp_skill_menu(d);
     }
@@ -838,9 +836,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
       medit_disp_skill_menu(d);
     } else {
       MOB->mob_specials.mob_skills[3] = number;
-      GET_SKILL(MOB, MOB->mob_specials.mob_skills[2]) = MOB->mob_specials.mob_skills[3];
-      SET_SKILL(MOB, MOB->mob_specials.mob_skills[2],
-                MOB->mob_specials.mob_skills[3]);
+      SET_SKILL(MOB, MOB->mob_specials.mob_skills[2], MOB->mob_specials.mob_skills[3]);
       d->edit_mode = MEDIT_SKILLS;
       medit_disp_skill_menu(d);
     }
@@ -858,9 +854,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
       medit_disp_skill_menu(d);
     } else {
       MOB->mob_specials.mob_skills[5] = number;
-      GET_SKILL(MOB, MOB->mob_specials.mob_skills[4]) = MOB->mob_specials.mob_skills[5];
-      SET_SKILL(MOB, MOB->mob_specials.mob_skills[4],
-                MOB->mob_specials.mob_skills[5]);
+      SET_SKILL(MOB, MOB->mob_specials.mob_skills[4], MOB->mob_specials.mob_skills[5]);
       d->edit_mode = MEDIT_SKILLS;
       medit_disp_skill_menu(d);
     }
@@ -878,9 +872,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
       medit_disp_skill_menu(d);
     } else {
       MOB->mob_specials.mob_skills[7] = number;
-      GET_SKILL(MOB, MOB->mob_specials.mob_skills[6]) = MOB->mob_specials.mob_skills[7];
-      SET_SKILL(MOB, MOB->mob_specials.mob_skills[6],
-                MOB->mob_specials.mob_skills[7]);
+      SET_SKILL(MOB, MOB->mob_specials.mob_skills[6], MOB->mob_specials.mob_skills[7]);
       d->edit_mode = MEDIT_SKILLS;
       medit_disp_skill_menu(d);
     }
@@ -898,9 +890,7 @@ void medit_parse(struct descriptor_data *d, const char *arg)
       medit_disp_skill_menu(d);
     } else {
       MOB->mob_specials.mob_skills[9] = number;
-      GET_SKILL(MOB, MOB->mob_specials.mob_skills[8]) = MOB->mob_specials.mob_skills[9];
-      SET_SKILL(MOB, MOB->mob_specials.mob_skills[8],
-                MOB->mob_specials.mob_skills[9]);
+      SET_SKILL(MOB, MOB->mob_specials.mob_skills[8], MOB->mob_specials.mob_skills[9]);
       d->edit_mode = MEDIT_SKILLS;
       medit_disp_skill_menu(d);
     }

@@ -784,7 +784,7 @@ struct command_info cmd_info[] =
 
     { "version"  , POS_DEAD    , do_gen_ps   , 0, SCMD_VERSION },
     { "vemote"   , POS_SLEEPING, do_vemote   , 0 , 0 },
-    //    { "visible"  , POS_RESTING , do_visible  , 1, 0 },
+    { "visible"  , POS_RESTING , do_visible  , LVL_BUILDER, 0 },
     { "view"     , POS_LYING   , do_imagelink, 0, 0 },
     { "vlist"    , POS_DEAD    , do_vlist    , LVL_BUILDER, 0 },
     { "vnum"     , POS_DEAD    , do_vnum     , LVL_BUILDER, 0 },
@@ -1172,7 +1172,7 @@ struct command_info mtx_info[] =
     { "'", 0, do_say, 0, 0},
     { "score", 0, do_matrix_score, 0, 0},
     { "scan", 0, do_matrix_scan, 0, 0},
-    { "selffry", 0, do_fry_self, LVL_BUILDER, 0},
+    // { "selffry", 0, do_fry_self, LVL_BUILDER, 0},
     { "talk", 0, do_talk, 0, 0},
     { "tap", 0, do_tap, 0, 0},
     { "tell", 0, do_tell, 0, 0 },
@@ -1270,6 +1270,7 @@ const char *reserved[] =
     "new",
     "guest",
     "deleted",
+    "admin", // Added here since this is the one random bots like to try.
     "\n"
   };
 
@@ -2378,9 +2379,6 @@ void nanny(struct descriptor_data * d, char *arg)
      * (1) add a 15 or 20-second time limit for entering a password, and (2)
      * re-add the code to cut off duplicates when a player quits.  JE 6 Feb 96
      */
-
-    /* turn echo back on */
-    echo_on(d);
       
     // Clear their idle counter so they don't get dropped mysteriously.
     d->idle_tics = 0;
@@ -2388,6 +2386,9 @@ void nanny(struct descriptor_data * d, char *arg)
     if (!*arg)
       close_socket(d);
     else if (str_cmp(arg, "abort") == 0) {
+      /* turn echo back on */
+      echo_on(d);
+      
       SEND_TO_Q("OK, let's try a different name.\r\n\r\nWhat's your handle, chummer? ", d);
       STATE(d) = CON_GET_NAME;
     } else {
@@ -2403,10 +2404,12 @@ void nanny(struct descriptor_data * d, char *arg)
           STATE(d) = CON_CLOSE;
         } else {
           SEND_TO_Q("Wrong password.\r\nPassword: ", d);
-          echo_off(d);
         }
         return;
       }
+      
+      /* turn echo back on */
+      echo_on(d);
       
       // Commit the password to DB on the assumption it's changed.
       char query_buf[2048];
