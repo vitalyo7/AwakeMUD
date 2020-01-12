@@ -11,10 +11,10 @@ SHELL = /bin/sh
 .SUFFIXES :
 .SUFFIXES : .cpp .o
 .DELETE_ON_ERROR : 
-.PHONY : unittest
-#CXX = g++
-CXX = clang
-CC = g++
+.PHONY : 
+CXX = g++
+#CXX = clang
+CC = gcc
 
 PROFILE = -ggdb
 CVS = cvs
@@ -24,20 +24,18 @@ CVS = cvs
 # The obvious drawback is that it's time consuming, so once things go
 # smooth, the define can be removed.
 
-COMMON_FLAGS = -lmysqlclient -lz -lm -lsodium -lstdc++
-
 # OSX? Uncomment these:
-LIBS = -L/usr/local/lib $(COMMON_FLAGS) -lcurl
+LIBS = -L/usr/local/lib -lmysqlclient -lz -lm -lcurl -lsodium -lstdc++
 MYFLAGS = -DUSE_MEMORY_CANARIES -DDEBUG -DSELFADVANCE -DIDLEDELETE_DRYRUN -DGITHUB_INTEGRATION -Dosx -I /usr/local/include/ -Wall -Wextra -Wno-unused-parameter
 
 # Linux / others? Uncomment these:
-#LIBS = -lcrypt -L/usr/local/lib $(COMMON_FLAGS) -lnsl -lcurl
+#LIBS = -lcrypt -L/usr/local/lib -lmysqlclient -lz -lm -lnsl -lcurl -lsodium -lstdc++
 #MYFLAGS = -DDEBUG_CRYPTO -DDEBUG -DSELFADVANCE -DIDLEDELETE_DRYRUN -Dlinux -I /usr/local/include/ -Wall -Wextra -Wno-unused-parameter
 # If you want GitHub integration, add -DGITHUB_INTEGRATION to the above and fill out your basic auth credentials in github_config.cpp.
 
 # Cygwin:
-#LIBS = -L/usr/local/lib $(COMMON_FLAGS) -lcrypt
-#MYFLAGS = -DDEBUG -DSELFADVANCE -DIDLEDELETE_DRYRUN -DWIN32 -I /usr/local/include/ -Wall -Wextra -Wno-unused-parameter
+LIBS = -L/usr/local/lib -lmysqlclient -lz -lm -lsodium -lcrypt
+MYFLAGS = -DDEBUG -DSELFADVANCE -DIDLEDELETE_DRYRUN -DWIN32 -I /usr/local/include/ -Wall -Wextra -Wno-unused-parameter
 
 CPPFLAGS = $(MYFLAGS) $(PROFILE)
 
@@ -114,7 +112,7 @@ convwld:
 	$(CXX) $(CPPFLAGS) -o ../bin/convwld util/convwld.cpp constants.cpp bitfield.cpp assert.cpp
 
 clean:
-	rm -f *.o ../test/*.o *.d ../bin/awake.new
+	rm -f *.o *.d ../bin/awake.new
 
 %.d: %.cpp
 	set -e; $(CC) -MM $(CPPFLAGS) $< \
@@ -139,20 +137,6 @@ update:
 
 all:
 	$(MAKE) ../bin/awake.new
-
-unittest_srcs = $(wildcard ../test/*.cpp)
-unittest_objs = $(unittest_srcs:.cpp=.o) $(objfiles)
-
-unittest: ../bin/unittest
-	../bin/unittest
-
-../bin/unittest: CPPFLAGS+=-DUNITTEST
-../bin/unittest: $(unittest_objs)
-	$(CXX) -o $@ $(PROFILE) $(unittest_objs) $(LIBS)
-
-../test/%.o: ../test/%.cpp
-	$(CXX) -c $(CPPFLAGS) -I../3rdparty/catch2 -o $@ $<
-
 
 include $(sourcefiles:.cpp=.d)
 

@@ -1700,7 +1700,9 @@ ACMD(do_attach)
     }
   }
 
-  attach_attachment_to_weapon(item, item2, ch);
+  // If we failed to attach it, don't destroy the attachment.
+  if (!attach_attachment_to_weapon(item, item2, ch))
+    return;
   
   // Trash the actual accessory object-- the game will look it up by vnum if it's ever needed.
   obj_from_char(item);
@@ -1768,7 +1770,8 @@ ACMD(do_unattach)
     }
 
   if (!found) {
-    act("That doesn't seem to be attached to $p.", FALSE, ch, gun, 0, TO_CHAR);
+    sprintf(buf, "There doesn't seem to be %s %s attached to $p.", AN(buf1), buf1);
+    act(buf, FALSE, ch, gun, 0, TO_CHAR);
     return;
   }
 

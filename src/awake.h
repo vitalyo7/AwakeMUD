@@ -963,29 +963,30 @@ enum {
 #define TYPE_POLTERGEIST      412
 #define TYPE_ELEVATOR         413
 
-#define WEAP_EDGED		0
-#define WEAP_CLUB		1
-#define WEAP_POLEARM		2
-#define WEAP_WHIP		3
-#define WEAP_GLOVE		4
-#define WEAP_HOLDOUT		5
-#define WEAP_LIGHT_PISTOL	6
-#define WEAP_MACHINE_PISTOL	7
-#define WEAP_HEAVY_PISTOL	8
-#define WEAP_TASER		9
-#define WEAP_SMG		10
-#define WEAP_SPORT_RIFLE	11
-#define WEAP_SNIPER_RIFLE	12
+#define WEAP_EDGED          0
+#define WEAP_CLUB           1
+#define WEAP_POLEARM        2
+#define WEAP_WHIP           3
+#define WEAP_GLOVE          4
+#define WEAP_HOLDOUT        5
+#define WEAP_LIGHT_PISTOL   6
+#define WEAP_MACHINE_PISTOL 7
+#define WEAP_HEAVY_PISTOL   8
+#define WEAP_TASER          9
+#define WEAP_SMG            10
+#define WEAP_SPORT_RIFLE    11
+#define WEAP_SNIPER_RIFLE   12
 #define WEAP_ASSAULT_RIFLE	13
-#define WEAP_SHOTGUN		14
-#define WEAP_LMG		15
-#define WEAP_MMG		16
-#define WEAP_HMG		17
-#define WEAP_CANNON		18
-#define WEAP_MINIGUN		19
-#define WEAP_GREN_LAUNCHER	20
-#define WEAP_MISS_LAUNCHER	21
-#define MAX_WEAP		22
+#define WEAP_SHOTGUN		    14
+#define WEAP_LMG            15
+#define WEAP_MMG            16
+#define WEAP_HMG            17
+#define WEAP_CANNON         18
+#define WEAP_MINIGUN        19
+#define WEAP_GREN_LAUNCHER  20
+#define WEAP_MISS_LAUNCHER  21
+#define WEAP_REVOLVER       22
+#define MAX_WEAP            23
 
 /* all those attack types can be used plus these for damage types to
 * objects */
@@ -1856,6 +1857,23 @@ enum {
 #define CON_ASKNAME      45            /* Ask user for name            */
 #define CON_PGEDIT       46
 #define CON_HELPEDIT     47
+
+/* chargen connected modes */
+#define CCR_AWAIT_CR    -1
+#define CCR_SEX         0
+#define CCR_RACE        1
+#define CCR_TOTEM       2
+#define CCR_PRIORITY    3
+#define CCR_ASSIGN      4
+#define CCR_TRADITION   5
+#define CCR_ASPECT	6
+#define CCR_TOTEM2	7
+#define CCR_TYPE	8
+#define CCR_POINTS	9
+#define CCR_PO_ATTR	10
+#define CCR_PO_SKILL	11
+#define CCR_PO_RESOURCES	12
+#define CCR_PO_MAGIC	13
 
 #define PO_RACE		0
 #define PO_ATTR		1
