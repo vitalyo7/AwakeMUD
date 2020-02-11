@@ -278,6 +278,8 @@ void do_start(struct char_data * ch)
   GET_REP(ch) = 0;
   GET_NOT(ch) = 0;
   GET_TKE(ch) = 0;
+  
+  GET_INVIS_LEV(ch) = 0;
 
   ch->points.max_physical = 1000;
   ch->points.max_mental = 1000;
@@ -287,22 +289,22 @@ void do_start(struct char_data * ch)
   GET_PHYSICAL(ch) = GET_MAX_PHYSICAL(ch);
   GET_MENTAL(ch) = GET_MAX_MENTAL(ch);
 
-  GET_COND(ch, COND_THIRST) = 24;
-  GET_COND(ch, COND_FULL) = 24;
+  GET_COND(ch, COND_THIRST) = FOOD_DRINK_MAX;
+  GET_COND(ch, COND_FULL) = FOOD_DRINK_MAX;
   GET_COND(ch, COND_DRUNK) = 0;
   GET_LOADROOM(ch) = RM_NEWBIE_LOADROOM;
 
   PLR_FLAGS(ch).SetBit(PLR_NEWBIE);
   PRF_FLAGS(ch).SetBits(PRF_AUTOEXIT, PRF_LONGEXITS, ENDBIT);
-  PRF_FLAGS(ch).RemoveBit(PRF_NOHASSLE);
-  PLR_FLAGS(ch).SetBit(PLR_AUTH);
+  PRF_FLAGS(ch).RemoveBits(PRF_NOHASSLE, PRF_HOLYLIGHT, PRF_PACIFY, PRF_ROLLS, PRF_QUESTOR, PRF_NEWBIEHELPER, ENDBIT);
+  // PLR_FLAGS(ch).SetBit(PLR_AUTH);
   ch->player.time.played = 0;
   ch->player.time.lastdisc = time(0);
 
   // Clear all their skills except for English.
   for (int i = SKILL_ATHLETICS; i < MAX_SKILLS; i++) {
     if (i == SKILL_ENGLISH)
-      set_character_skill(ch, i, 8, FALSE);
+      set_character_skill(ch, i, STARTING_LANGUAGE_SKILL_LEVEL, FALSE);
     else
       set_character_skill(ch, i, 0, FALSE);
   }
@@ -850,9 +852,10 @@ bool load_char(const char *name, char_data *ch, bool logon)
     }
     
     // Initialize character pgroup struct.
-    GET_PGROUP_MEMBER_DATA(ch)->pgroup = ptr;
+    GET_PGROUP(ch) = ptr;
   } else {
     mysql_free_result(res);
+    GET_PGROUP_MEMBER_DATA(ch) = NULL;
   }
   
   // Load pgroup invitation data.
@@ -1050,8 +1053,8 @@ static bool save_char(char_data *player, DBIndex::vnum_t loadroom)
                player->real_abils.highestindex, GET_MAX_HACKING(player), GET_BODY(player),
                GET_DEFENSE(player), GET_NUYEN(player), GET_BANK(player), GET_KARMA(player),
                GET_REP(player), GET_NOT(player), GET_TKE(player),
-               PLR_FLAGGED(player, PLR_JUST_DIED), GET_PHYSICAL(player), GET_PHYSICAL_LOSS(player),
-               GET_MENTAL(player), GET_MENTAL_LOSS(player), GET_PERM_BOD_LOSS(player), GET_WIMP_LEV(player),
+               PLR_FLAGGED(player, PLR_JUST_DIED), MAX(0, GET_PHYSICAL(player)), GET_PHYSICAL_LOSS(player),
+               MAX(0, GET_MENTAL(player)), GET_MENTAL_LOSS(player), GET_PERM_BOD_LOSS(player), GET_WIMP_LEV(player),
                GET_LOADROOM(player), GET_LAST_IN(player), time(0), GET_COND(player, COND_FULL),
                GET_COND(player, COND_THIRST), GET_COND(player, COND_DRUNK),
                SHOTS_FIRED(player), SHOTS_TRIGGERED(player), GET_TRADITION(player), pgroup_num,

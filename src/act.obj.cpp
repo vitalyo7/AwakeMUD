@@ -33,6 +33,9 @@ extern int return_general(int skill_num);
 extern bool check_quest_delivery(struct char_data *ch, struct char_data *mob, struct obj_data *obj);
 extern void check_quest_delivery(struct char_data *ch, struct obj_data *obj);
 void calc_weight(struct char_data *ch);
+extern void dominator_mode_switch(struct char_data *ch, struct obj_data *obj, int mode);
+
+SPECIAL(weapon_dominator);
 
 bool search_cyberdeck(struct obj_data *cyberdeck, struct obj_data *program)
 {
@@ -2406,21 +2409,33 @@ void perform_wear(struct char_data * ch, struct obj_data * obj, int where)
     act("$p requires two free hands.", FALSE, ch, GET_EQ(ch, WEAR_HOLD), 0, TO_CHAR);
     return;
   }
+  
+  // Iterate through what they're wearing and check for compatibility.
+  struct obj_data *worn_item = NULL;
+  for (int wearloc = 0; wearloc < NUM_WEARS; wearloc++) {
+    // They're allowed to wear helmets.
+    if (wearloc == WEAR_HEAD)
+      continue;
+    
+    // Not wearing anything here? Skip.
+    if (!(worn_item = GET_EQ(ch, wearloc)))
+      continue;
+    
+    // If this item can't be worn with other armors, check to make sure we meet that restriction.
+    if ((IS_OBJ_STAT(obj, ITEM_BLOCKS_ARMOR) || IS_OBJ_STAT(obj, ITEM_HARDENED_ARMOR)) &&
+        (GET_WORN_IMPACT(worn_item) || GET_WORN_BALLISTIC(worn_item))) {
+      send_to_char(ch, "You can't wear %s with %s.\r\n", GET_OBJ_NAME(obj), GET_OBJ_NAME(worn_item));
+      return;
+    }
+    
+    // If what they're wearing blocks other armors, and this item is armored, fail.
+    if ((IS_OBJ_STAT(worn_item, ITEM_BLOCKS_ARMOR) || IS_OBJ_STAT(worn_item, ITEM_HARDENED_ARMOR)) &&
+        (GET_WORN_IMPACT(obj) || GET_WORN_BALLISTIC(obj))) {
+      send_to_char(ch, "You can't wear %s with %s.\r\n", GET_OBJ_NAME(obj), GET_OBJ_NAME(worn_item));
+      return;
+    }
+  }
 
-  if (IS_OBJ_STAT(obj, ITEM_FORMFIT)) {
-    if (GET_EQ(ch, WEAR_BODY) && GET_LEGAL_NUM(GET_EQ(ch, WEAR_BODY))) {
-      send_to_char(ch, "You can't wear that with %s.\r\n", GET_OBJ_NAME(GET_EQ(ch, WEAR_BODY)));
-      return;
-    }
-    if (GET_EQ(ch, WEAR_ABOUT) && GET_LEGAL_NUM(GET_EQ(ch, WEAR_ABOUT))) {
-      send_to_char(ch, "You can't wear that with %s.\r\n", GET_OBJ_NAME(GET_EQ(ch, WEAR_ABOUT)));
-      return;
-    }
-  }
-  if ((where == WEAR_ABOUT || where == WEAR_BODY) && GET_LEGAL_NUM(obj) && GET_EQ(ch, WEAR_UNDER) && IS_OBJ_STAT(GET_EQ(ch, WEAR_UNDER), ITEM_FORMFIT)) {
-    send_to_char(ch, "You can't wear that with %s.\r\n", GET_OBJ_NAME(GET_EQ(ch, WEAR_UNDER)));
-    return;
-  }
   wear_message(ch, obj, where);
   if (obj->in_obj)
     obj_from_obj(obj);
@@ -3019,7 +3034,7 @@ int draw_weapon(struct char_data *ch)
 
   if (!GET_EQ(ch, WEAR_WIELD) || !GET_EQ(ch, WEAR_HOLD))
   {
-    for (int x = 0; x < NUM_WEARS; x++)
+    for (int x = 0; x < NUM_WEARS; x++) {
       if (GET_EQ(ch, x)) {
         if (GET_OBJ_TYPE(GET_EQ(ch, x)) == ITEM_HOLSTER && GET_OBJ_VAL(GET_EQ(ch, x), 3)) {
           hols = GET_EQ(ch, x)->contains;
@@ -3042,9 +3057,13 @@ int draw_weapon(struct char_data *ch)
             act("You draw $p from $P.", FALSE, ch, hols, GET_EQ(ch, x), TO_CHAR);
             act("$n draws $p from $P.", TRUE, ch, hols, GET_EQ(ch, x), TO_ROOM);
             i++;
+            
+            if (GET_EQ(ch, WEAR_WIELD) && GET_OBJ_SPEC(GET_EQ(ch, WEAR_WIELD)) == weapon_dominator) {
+              dominator_mode_switch(ch, GET_EQ(ch, WEAR_WIELD), DOMINATOR_MODE_PARALYZER);
+            }
           }
-        } else if (GET_OBJ_TYPE(GET_EQ(ch, x)) == ITEM_WORN)
-          for (obj = GET_EQ(ch, x)->contains; obj; obj = obj->next_content)
+        } else if (GET_OBJ_TYPE(GET_EQ(ch, x)) == ITEM_WORN) {
+          for (obj = GET_EQ(ch, x)->contains; obj; obj = obj->next_content) {
             if (GET_OBJ_TYPE(obj) == ITEM_HOLSTER && GET_OBJ_VAL(obj, 3)) {
               hols = obj->contains;
               if (!hols) {
@@ -3066,11 +3085,19 @@ int draw_weapon(struct char_data *ch)
                 act("You draw $p from $P.", FALSE, ch, hols, GET_EQ(ch, x), TO_CHAR);
                 act("$n draws $p from $P.", TRUE, ch, hols, GET_EQ(ch, x), TO_ROOM);
                 i++;
+                
+                if (GET_EQ(ch, WEAR_WIELD) && GET_OBJ_SPEC(GET_EQ(ch, WEAR_WIELD)) == weapon_dominator) {
+                  dominator_mode_switch(ch, GET_EQ(ch, WEAR_WIELD), DOMINATOR_MODE_PARALYZER);
+                }
               }
             }
-       }
+          }
+        }
+      }
+    }
   }
   affect_total(ch);
+  
   return i;
 }
 

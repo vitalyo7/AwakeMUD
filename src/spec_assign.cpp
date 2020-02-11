@@ -150,6 +150,13 @@ teach_t teachers[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
     "You spend some time making small talk with the secretary.\r\n", AMATEUR },
   
+#ifdef USE_PRIVATE_CE_WORLD
+  // Jessie (SPLAT! Paintballer)
+  { 70604, { SKILL_PISTOLS, SKILL_BR_PISTOL, SKILL_STEALTH, SKILL_CLIMBING, SKILL_ATHLETICS,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  "You learn a few things from the surprisingly-knowledgeable kid.\r\n", AMATEUR },
+#endif
+  
 /*                     { 65106, { SKILL_MEDIA_ETIQUETTE, SKILL_STEALTH, 0, 0, 0, 0, 0, 0 }, "You talk to the reporter about current events for"
                          " a while.\r\n", AMATEUR },
                        { 18311, { SKILL_STREET_ETIQUETTE, SKILL_MEDIA_ETIQUETTE, SKILL_ELF_ETIQUETTE, SKILL_CORPORATE_ETIQUETTE, 
@@ -609,6 +616,7 @@ void assign_objects(void)
   SPECIAL(chargen_hopper);
   SPECIAL(quest_debug_scanner);
   SPECIAL(taxi_sign);
+  SPECIAL(weapon_dominator);
 
   ASSIGNOBJ(3, gen_board);  /* Rift's Board */
   ASSIGNOBJ(4, gen_board);  /* Pook's Board */
@@ -623,6 +631,9 @@ void assign_objects(void)
   ASSIGNOBJ(1038, gen_board);  /* Coders Board */
   ASSIGNOBJ(1074, gen_board);  /* Administration Board */
   ASSIGNOBJ(10018, gen_board);  /* ImmHQ Board */
+#ifdef USE_PRIVATE_CE_WORLD
+  ASSIGNOBJ(10034, gen_board); /* Mortal Relations Board */
+#endif
 //ASSIGNOBJ(65126, gen_board);
 //ASSIGNOBJ(26150, gen_board);
   ASSIGNOBJ(1117, desktop);
@@ -690,6 +701,7 @@ void assign_objects(void)
   ASSIGNOBJ(OBJ_SEATTLE_TAXI_SIGN, taxi_sign);
   ASSIGNOBJ(OBJ_PORTLAND_TAXI_SIGN, taxi_sign);
   
+  ASSIGNOBJ(10005, weapon_dominator);
   
   WSPEC(monowhip);
 

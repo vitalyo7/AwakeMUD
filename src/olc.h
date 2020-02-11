@@ -81,6 +81,8 @@ extern void write_index_file(const char *suffix);
 #define HEDIT_EXTRA_ACCESS2	34
 #define HEDIT_EXTRA_FILES2	35
 #define HEDIT_EXTRA_SLAVE2	36
+#define HEDIT_EXIT_ADD3     37
+#define HEDIT_EXIT_ADD4     38
 
 
 #define ICEDIT_MAIN_MENU		0
@@ -132,11 +134,12 @@ extern void write_index_file(const char *suffix);
 #define IEDIT_AVAILTN			34
 #define IEDIT_AVAILDAY			35
 #define IEDIT_LEGAL1			36
-#define IEDIT_LEGAL2			37
-#define IEDIT_LEGAL3			38
+#define IEDIT_LEGAL2                    37
+#define IEDIT_LEGAL3                    38
 #define IEDIT_VALUE_11                  39
 #define IEDIT_VALUE_12                  40
 #define IEDIT_SOURCEINFO                41
+#define IEDIT_STREETINDEX               42
 
 /* Submodes of REDIT connectedness */
 #define REDIT_CONFIRM_EDIT              0
@@ -182,6 +185,9 @@ extern void write_index_file(const char *suffix);
 #define REDIT_Z				46
 #define REDIT_BACKGROUND		47
 #define REDIT_BACKGROUND2		48
+#define REDIT_EXIT_ENTRY_STRING_SECONDPERSON 49
+#define REDIT_EXIT_ENTRY_STRING_THIRDPERSON 50
+#define REDIT_EXIT_EXIT_STRING_THIRDPERSON  51
 
 #define MEDIT_CONFIRM_EDIT              0
 #define MEDIT_CONFIRM_SAVESTRING        1

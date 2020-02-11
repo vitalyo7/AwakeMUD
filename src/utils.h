@@ -595,6 +595,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
     obj_index[GET_OBJ_RNUM(obj)].func : NULL)
 #define GET_WSPEC(obj) ((obj)->item_number >= 0 ? \
         (obj_index[GET_OBJ_RNUM(obj)].wfunc) : NULL)
+#define GET_OBJ_STREET_INDEX(obj)   ((obj)->obj_flags.street_index)
 
 #define CAN_WEAR(obj, part) ((obj)->obj_flags.wear_flags.IsSet((part)))
 
@@ -751,6 +752,7 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 #define GET_WORKSHOP_TYPE(workshop)            (GET_OBJ_VAL((workshop), 0))
 #define GET_WORKSHOP_GRADE(workshop)           (GET_OBJ_VAL((workshop), 1))
 #define GET_WORKSHOP_IS_SETUP(workshop)        (GET_OBJ_VAL((workshop), 2))
+#define GET_WORKSHOP_AMMOKIT_TYPE(workshop)    (GET_OBJ_VAL((workshop), 2))
 #define GET_WORKSHOP_UNPACK_TICKS(workshop)    (GET_OBJ_VAL((workshop), 3))
 
 // ITEM_CAMERA convenience defines
@@ -846,6 +848,8 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 // ITEM_PROGRAM convenience defines
 
 // ITEM_GUN_MAGAZINE convenience defines
+#define GET_MAGAZINE_AMMO_TYPE(magazine)       (GET_OBJ_VAL((magazine), 2))
+#define GET_MAGAZINE_AMMO_COUNT(magazine)      (GET_OBJ_VAL((magazine), 9))
 
 // ITEM_GUN_ACCESSORY convenience defines
 #define GET_ACCESSORY_ATTACH_LOCATION(accessory) (GET_OBJ_VAL((accessory), 0))
@@ -877,6 +881,12 @@ extern bool PLR_TOG_CHK(char_data *ch, dword offset);
 // ITEM_QUEST convenience defines
 
 // ITEM_GUN_AMMO convenience defines
+#define GET_AMMOBOX_QUANTITY(box)            (GET_OBJ_VAL((box), 0))
+#define GET_AMMOBOX_WEAPON(box)              (GET_OBJ_VAL((box), 1))
+#define GET_AMMOBOX_TYPE(box)                (GET_OBJ_VAL((box), 2))
+#define GET_AMMOBOX_INTENDED_QUANTITY(box)   (GET_OBJ_VAL((box), 3))
+#define GET_AMMOBOX_TIME_TO_COMPLETION(box)  (GET_OBJ_VAL((box), 4))
+#define GET_AMMOBOX_CREATOR(box)             (GET_OBJ_VAL((box), 9))
 
 // ITEM_KEYRING convenience defines
 
